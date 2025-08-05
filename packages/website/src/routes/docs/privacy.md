@@ -1,60 +1,48 @@
 # Privacy Policy
 
-## 1. Data Collection & Usage
+## Your Privacy is Our Priority
 
-- This extension operates with zero data collection - we do not collect or process any email data
-- All email data and operations are handled directly between your browser and Gmail servers
-- The extension only:
-  - Displays notifications for new emails
-  - Shows unread email count
-  - Provides interface for email actions
-- All data processing happens locally in your browser
-- No analytics or tracking is implemented
-- All settings and preferences are stored locally in your browser
+This extension is designed with privacy-first principles. **We don't collect, store, or process any of your email data.**
 
-## 2. Gmail API Usage
+## How It Works
 
-- The extension uses Gmail API to:
-  - Fetch new email notifications
-  - Display unread email count
-  - Show email content
-  - Perform email actions (mark as read, archive, delete, etc.)
-  - Send new emails
-- All API interactions are direct between your browser and Gmail servers
-- No email data passes through our servers
-- We only request necessary Gmail API permissions
+- All email operations happen directly between your browser and Gmail
+- Email content never passes through our servers
+- No analytics or tracking implemented
+- Settings stored locally in your browser only
 
-## 3. Permissions
+## Gmail API Usage
 
-- Only requests necessary browser permissions for functionality
-- Only accesses content under the gmail.com domain
-- Requires Gmail API access for core functionality
+We use Gmail API solely to:
 
-## 4. Data Security
+- Fetch and display new email notifications
+- Show unread count
+- Enable email actions (read, archive, delete, reply)
 
-- All email data is handled directly by Gmail's secure servers
-- We do not have access to any email content or metadata
-- We do not store or process any email data
-- All extension operations happen locally in your browser
-- No data is transmitted to our servers
+All API calls go directly from your browser to Gmail's secure servers.
 
-## 5. Third-Party Services
+## Required Permissions
 
-- Payment processing is handled by third-party payment platforms
-- Gmail API services are provided by Google with their own privacy policies
-- Users will be notified when interacting with third-party services
+- **Gmail API access**: Core email functionality
+- **Browser notifications**: Desktop alerts
+- **Storage**: Local settings only
+- **gmail.com access**: Required for Gmail integration
 
-## 6. Control & Transparency
+## Open Source Transparency
 
-- The extension is completely open source
-- All source code is publicly available for verification of our privacy practices
-- Users can review the code to ensure there are no unexpected behaviors
-- Users can uninstall the extension at any time to stop all data collection
+This extension is 100% open source, including our backend. You can:
 
-## 7. Contact
+- Review all code on [GitHub](https://github.com/rxliuli/gmail-notifier)
+- Verify our privacy claims yourself
+- Self-host if preferred
 
-For privacy-related questions or data deletion requests, please contact <rxliuli@gmail.com>.
+## Third-Party Services
 
-Last Updated: 2025-06-13
+- **Payments**: Processed by secure payment providers (Paddle)
+- **Gmail**: Subject to [Google's Privacy Policy](https://policies.google.com/privacy)
 
-Note: This policy will be updated as new features are added. Users will be notified of significant changes.
+## Contact
+
+Questions? Email us at <rxliuli@gmail.com>
+
+Last Updated: 2025-08-05
