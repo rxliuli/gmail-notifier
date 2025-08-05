@@ -48,8 +48,9 @@ export function Header() {
     <header className="border-b">
       <div className="container mx-auto px-4 py-4">
         <nav className="flex items-center justify-between">
-          <Link to="/" className="text-xl font-bold">
-            Gmail Notifier
+          <Link to="/" className="text-xl font-bold flex items-center gap-2">
+            <img src={'/icon/96.png'} className={'w-8 h-8'} alt={'Gmail Notifier'} />
+            <span className={'hidden md:block'}>Gmail Notifier</span>
           </Link>
           <div className="flex items-center space-x-6">
             <Link to="/pricing" className="flex items-center space-x-2 text-muted-foreground hover:text-foreground">
