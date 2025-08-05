@@ -1,0 +1,31 @@
+{
+  "name": "gmail-notifier",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-01-24",
+  "vars": {
+    "APP_ENV": "production"
+  },
+  "assets": {
+    "directory": "../website/.output/public",
+    "binding": "ASSETS"
+  },
+  "kv_namespaces": [
+    {
+      "binding": "MY_KV",
+      "id": "a1219571e1f14be69338c0a74f5a0f73",
+      "preview_id": "a1219571e1f14be69338c0a74f5a0f73"
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "gmail-notifier",
+      "database_id": "ef17aad9-3117-4281-b6ea-5f07e3bb2c86",
+      "migrations_dir": "drizzle"
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}

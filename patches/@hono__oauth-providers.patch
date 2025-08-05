@@ -1,0 +1,29 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+deleted file mode 100644
+index bb5d85f795aee2e1a6447529f26e5d9aaa17e01a..0000000000000000000000000000000000000000
+diff --git a/dist/providers/google/index.js b/dist/providers/google/index.js
+index d966c1e47e0cece0c8e2e89fdf7260b7c5e7adb5..26133702016e331d3311a88632a65e06d1f5b353 100644
+--- a/dist/providers/google/index.js
++++ b/dist/providers/google/index.js
+@@ -108,6 +108,13 @@ var AuthFlow = class {
+       };
+       this.granted_scopes = response.scope.split(" ");
+     }
++    if ("refresh_token" in response) {
++      this.refresh_token = {
++        token: response.refresh_token,
++        expires_in: response.refresh_token_expires_in
++      };
++    }
++    console.log('response', response)
+   }
+   async getUserData() {
+     await this.getTokenFromCode();
+@@ -163,6 +170,7 @@ function googleAuth(options) {
+     c.set("token", auth.token);
+     c.set("user-google", auth.user);
+     c.set("granted-scopes", auth.granted_scopes);
++    c.set("refresh-token", auth.refresh_token);
+     await next();
+   };
+ }
