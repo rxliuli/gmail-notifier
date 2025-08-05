@@ -22,7 +22,7 @@ auth
         'email',
         'profile',
         'https://www.googleapis.com/auth/gmail.send',
-        'https://www.googleapis.com/auth/gmail.readonly',
+        'https://www.googleapis.com/auth/gmail.metadata',
       ],
       redirect_uri: `${baseUrl}/api/v1/auth/google`,
       access_type: 'offline',
@@ -41,7 +41,7 @@ export async function googleAuthCallback(c: Pick<Context<{ Bindings: Env }>, 'en
   }
   if (
     !grantedScopes?.includes('https://www.googleapis.com/auth/gmail.send') ||
-    !grantedScopes?.includes('https://www.googleapis.com/auth/gmail.readonly')
+    !grantedScopes?.includes('https://www.googleapis.com/auth/gmail.metadata')
   ) {
     return c.redirect(`${baseUrl}/logged?error=granted_scopes_not_enough`)
   }
