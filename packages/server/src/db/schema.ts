@@ -5,10 +5,15 @@ export const User = sqliteTable('user', {
   name: text('name').notNull(),
   email: text('email').unique().notNull(),
   image: text('image'),
-  createdAt: text('createdAt').notNull(),
-  updatedAt: text('updatedAt').notNull(),
+  createdAt: text('createdAt')
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+  updatedAt: text('updatedAt')
+    .notNull()
+    .$defaultFn(() => new Date().toISOString())
+    .$onUpdateFn(() => new Date().toISOString()),
   refreshToken: text('refreshToken').notNull(),
-  refreshTokenExpiresAt: text('refreshTokenExpiresAt').notNull(),
+  refreshTokenExpiresAt: text('refreshTokenExpiresAt'),
 })
 
 export const Account = sqliteTable('account', {
@@ -18,8 +23,13 @@ export const Account = sqliteTable('account', {
   userId: text('userId')
     .notNull()
     .references(() => User.id),
-  createdAt: text('createdAt').notNull(),
-  updatedAt: text('updatedAt').notNull(),
+  createdAt: text('createdAt')
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+  updatedAt: text('updatedAt')
+    .notNull()
+    .$defaultFn(() => new Date().toISOString())
+    .$onUpdateFn(() => new Date().toISOString()),
 })
 
 export const Subscription = sqliteTable('subscription', {
@@ -34,6 +44,11 @@ export const Subscription = sqliteTable('subscription', {
   paddleSubscriptionId: text('paddleSubscriptionId'),
   paddleTransactionId: text('paddleTransactionId'),
   plan: text('plan'),
-  createdAt: text('createdAt').notNull(),
-  updatedAt: text('updatedAt').notNull(),
+  createdAt: text('createdAt')
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+  updatedAt: text('updatedAt')
+    .notNull()
+    .$defaultFn(() => new Date().toISOString())
+    .$onUpdateFn(() => new Date().toISOString()),
 })
