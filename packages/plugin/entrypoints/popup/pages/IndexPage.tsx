@@ -122,20 +122,8 @@ function Toolbar() {
   return (
     <div className="flex items-center px-4 py-2 bg-card shadow-sm border-b border-border gap-2 sticky top-0 z-10">
       {/* Gmail icon */}
-      <div className="flex items-center mr-2">
-        <svg viewBox="0 0 40 40" width="28" height="28">
-          <g>
-            <path fill="#EA4335" d="M4 32V8a4 4 0 0 1 4-4h24a4 4 0 0 1 4 4v24a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z" />
-            <path fill="#FFF" d="M32 8H8v24h24V8z" />
-            <path
-              fill="#EA4335"
-              d="M32 8v24H8V8h24m0-2H8a2 2 0 0 0-2 2v24a2 2 0 0 0 2 2h24a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2z"
-            />
-            <path fill="#34A853" d="M8 8l12 9 12-9v2l-12 9-12-9V8z" />
-            <path fill="#FBBC05" d="M8 32V8l12 9 12-9v24H8z" />
-            <path fill="#4285F4" d="M32 32V8l-12 9-12-9v24h24z" />
-          </g>
-        </svg>
+      <div className="flex items-center">
+        <img src="/icon/48.png" alt="Gmail Notifier" className="w-6 h-6" />
       </div>
       <span className="font-medium text-foreground flex-1">
         {store.email} ({store.threads.length})
