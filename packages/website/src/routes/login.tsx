@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useLocalUser } from '~/lib/useAuth'
-import { useMount } from 'react-use'
+import { useMount } from '@/utils/useMount'
 
 export const Route = createFileRoute('/login')({
   component: Login,

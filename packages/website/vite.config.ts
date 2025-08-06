@@ -37,11 +37,4 @@ export default defineConfig({
       },
     },
   },
-  // TODO: https://github.com/streamich/react-use/issues/2353#issuecomment-2044683620
-  ssr: {
-    external: ['react-use'],
-  },
-  optimizeDeps: {
-    include: ['react-use'],
-  },
 })

@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button'
 import { openMailInWeb, newEmail } from '@/lib/api/gmail'
 import { bgMessager, GmailAction, popupMessager } from '@/lib/messager'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import {
   BanIcon,
@@ -27,8 +27,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { FaDiscord, FaGithub, FaGoogle } from 'react-icons/fa'
 import { EmailThread } from '@/lib/StateManager'
-import { useAsync, useEffectOnce } from 'react-use'
 import { getUser, login, logout } from '@/lib/auth'
+import { useEffectOnce } from '@/lib/utils/useEffectOnce'
 
 function MailItem({ thread, onClick }: { thread: EmailThread; onClick: () => void }) {
   const store = useMailStore()
@@ -117,7 +117,10 @@ function Toolbar() {
     }
   }
 
-  const userState = useAsync(getUser)
+  const userState = useQuery({
+    queryKey: ['user'],
+    queryFn: getUser,
+  })
 
   return (
     <div className="flex items-center px-4 py-2 bg-card shadow-sm border-b border-border gap-2 sticky top-0 z-10">
@@ -166,8 +169,8 @@ function Toolbar() {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align={'end'}>
-          {userState.value?.id ? (
-            <DropdownMenuItem onClick={logout}>{userState.value.email} Logout</DropdownMenuItem>
+          {userState.data?.id ? (
+            <DropdownMenuItem onClick={logout}>{userState.data.email} Logout</DropdownMenuItem>
           ) : (
             <DropdownMenuItem onClick={() => login()}>
               <FaGoogle />

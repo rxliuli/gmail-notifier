@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useMount } from 'react-use'
 import { toast } from 'sonner'
+import { useMount } from '@/utils/useMount'
 
 export const Route = createFileRoute('/logged')({
   component: () => {
