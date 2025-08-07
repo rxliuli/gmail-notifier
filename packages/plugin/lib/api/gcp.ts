@@ -1,7 +1,8 @@
 import { AccessTokenResponse } from '@gmail-notifier/server'
 
 export async function generateAccessToken(token: string) {
-  const resp = await fetch(`${import.meta.env.VITE_API_URL}/api/v1/gcp/access-token`, {
+  const baseUrl = import.meta.env.VITE_API_URL ?? 'https://gmail-notifier.rxliuli.com'
+  const resp = await fetch(`${baseUrl}/api/v1/gcp/access-token`, {
     method: 'GET',
     headers: {
       Authorization: `Bearer ${token}`,
