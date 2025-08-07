@@ -38,12 +38,12 @@ export async function googleAuthCallback(c: Pick<Context<{ Bindings: Env }>, 'en
   if (!googleUser?.id || !googleUser?.email) {
     return c.redirect(`${baseUrl}/logged?error=login_failed`)
   }
-  if (
-    !grantedScopes?.includes('https://www.googleapis.com/auth/gmail.send') ||
-    !grantedScopes?.includes('https://www.googleapis.com/auth/gmail.metadata')
-  ) {
-    return c.redirect(`${baseUrl}/logged?error=granted_scopes_not_enough`)
-  }
+  // if (
+  //   !grantedScopes?.includes('https://www.googleapis.com/auth/gmail.send') ||
+  //   !grantedScopes?.includes('https://www.googleapis.com/auth/gmail.metadata')
+  // ) {
+  //   return c.redirect(`${baseUrl}/logged?error=granted_scopes_not_enough`)
+  // }
 
   const now = new Date().toISOString()
   const db = drizzle(c.env.DB)
