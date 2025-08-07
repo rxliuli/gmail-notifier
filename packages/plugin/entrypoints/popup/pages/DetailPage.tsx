@@ -175,7 +175,7 @@ export function DetailPage() {
           })}
         </div>
       </div>
-      <MailSender />
+      {/* <MailSender /> */}
     </div>
   )
 }

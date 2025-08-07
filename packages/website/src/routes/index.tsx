@@ -39,7 +39,7 @@ function Index() {
         <div className="space-y-4">
           <Mail className="h-8 w-8 text-primary" />
           <h3 className="text-xl font-semibold">Quick Actions</h3>
-          <p className="text-muted-foreground">Open, reply, archive, delete, or mark all as read with quick actions.</p>
+          <p className="text-muted-foreground">View, archive, delete, or mark all as read with quick actions.</p>
         </div>
         <div className="space-y-4">
           <Shield className="h-8 w-8 text-primary" />
