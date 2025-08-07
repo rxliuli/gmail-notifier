@@ -514,3 +514,36 @@ export function parseReplyTo(
     name: to.senderName,
   }
 }
+
+function getMessageMetadata(messageId: string) {
+  // https://mail.google.com/mail/u/0/?ui=2&ik=${ik}&view=om&th=${threadId}
+  throw new Error('not implemented')
+}
+
+async function getThreadId(messageId: string, ik: string) {
+  // https://mail.google.com/mail/u/0/?ui=2&ik=ff42d05bcd&start=0&num=20&mb=0&rt=c&search=all&q=rfc822msgid:1987838ba0828a8b
+  const params = new URLSearchParams({
+    ui: '2',
+    ik: ik,
+    view: 'tl',
+    start: '0',
+    num: '20',
+    mb: '0',
+    rt: 'c',
+    search: 'all',
+    q: `rfc822msgid:${messageId}`,
+  })
+
+  const response = await fetch(`https://mail.google.com/mail/u/0/?${params}`, {
+    credentials: 'include',
+    headers: {
+      Accept: '*/*',
+      'X-Requested-With': 'XMLHttpRequest',
+    },
+  })
+  if (!response.ok) {
+    throw response
+  }
+  const text = await response.text()
+  throw new Error('not implemented')
+}

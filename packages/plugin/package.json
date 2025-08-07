@@ -14,7 +14,7 @@
     "build:safari": "vite-node lib/build/build-safari.ts",
     "compile": "tsc --noEmit",
     "postinstall": "wxt prepare",
-    "test": "vitest",
+    "test": "vitest run",
     "test:browser": "vitest"
   },
   "dependencies": {

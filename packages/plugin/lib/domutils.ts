@@ -68,7 +68,7 @@ export function xmldomAdapter(): Options<DefaultTreeAdapterMap['document'] | Ele
       return elem.attrs?.find((it) => it.name === name)?.value
     },
     hasAttrib: function (elem: Element, name: string) {
-      return elem.attrs.some((it) => it.name === name)
+      return elem.attrs?.some((it) => it.name === name) ?? false
     },
     removeSubsets: removeSubsets,
     getName: function (elem: Element) {

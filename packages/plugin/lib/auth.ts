@@ -3,7 +3,13 @@ import { openLoginWindow } from './utils/openLoginWindow'
 
 export function login(prompt?: 'consent') {
   const baseUrl = import.meta.env.DEV ? 'http://localhost:5173' : 'https://gmail-notifier.rxliuli.com'
-  openLoginWindow(`${baseUrl}/login?from=plugin&prompt=${prompt}`)
+  const url = new URL(baseUrl)
+  url.pathname = '/login'
+  url.searchParams.set('from', 'plugin')
+  if (prompt === 'consent') {
+    url.searchParams.set('prompt', prompt)
+  }
+  openLoginWindow(url.toString())
 }
 
 export async function setUser(user: MeResponse) {

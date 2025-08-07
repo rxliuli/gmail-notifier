@@ -13,7 +13,6 @@ const auth = new Hono<{ Bindings: Env }>()
 auth
   .use('/api/v1/auth/google', async (c, next) => {
     const baseUrl = c.env.APP_ENV === 'development' ? 'http://localhost:5173' : 'https://gmail-notifier.rxliuli.com'
-    console.log('prompt', c.req.query('prompt'))
     return googleAuth({
       client_id: c.env.GOOGLE_CLIENT_ID,
       client_secret: c.env.GOOGLE_CLIENT_SECRET,
@@ -21,8 +20,8 @@ auth
         'openid',
         'email',
         'profile',
-        'https://www.googleapis.com/auth/gmail.send',
-        'https://www.googleapis.com/auth/gmail.metadata',
+        // 'https://www.googleapis.com/auth/gmail.send',
+        // 'https://www.googleapis.com/auth/gmail.metadata',
       ],
       redirect_uri: `${baseUrl}/api/v1/auth/google`,
       access_type: 'offline',

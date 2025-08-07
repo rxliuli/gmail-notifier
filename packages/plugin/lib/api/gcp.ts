@@ -1,6 +1,4 @@
 import { AccessTokenResponse } from '@gmail-notifier/server'
-import { parseAddressField } from './gmail'
-import { EmailThread } from '../StateManager'
 
 export async function generateAccessToken(token: string) {
   const resp = await fetch(`${import.meta.env.VITE_API_URL}/api/v1/gcp/access-token`, {
@@ -43,11 +41,14 @@ interface Message {
 }
 
 export async function getMessage(options: { accessToken: string; messageId: string }) {
-  const resp = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${options.messageId}`, {
-    headers: {
-      Authorization: `Bearer ${options.accessToken}`,
+  const resp = await fetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${options.messageId}?format=metadata`,
+    {
+      headers: {
+        Authorization: `Bearer ${options.accessToken}`,
+      },
     },
-  })
+  )
   if (!resp.ok) {
     throw resp
   }
