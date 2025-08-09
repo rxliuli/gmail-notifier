@@ -24,6 +24,10 @@ export default defineConfig({
           path: '/logged',
           prerender: { enabled: true },
         },
+        {
+          path: '/settings',
+          prerender: { enabled: true },
+        },
       ],
     }),
     tailwindcss() as any,
