@@ -1,22 +1,41 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useLocalUser } from '~/lib/useAuth'
+import { getLocalUser, useLocalUser } from '~/lib/useAuth'
 import { useMount } from '@/utils/useMount'
+import { MeResponse } from '@gmail-notifier/server'
+import { toast } from 'sonner'
 
 export const Route = createFileRoute('/login')({
   component: Login,
 })
 
 function Login() {
-  const { login } = useLocalUser()
-  useMount(() => {
+  const { login, user } = useLocalUser()
+  useMount(async () => {
     const params = new URLSearchParams(location.search)
     const from = params.get('from')
-    if (from === 'plugin') {
-      console.log('login from plugin')
-      sessionStorage.setItem('from', 'plugin')
-    } else {
+    if (from !== 'plugin') {
       sessionStorage.removeItem('from')
+      return
     }
+    console.log('login from plugin')
+    sessionStorage.setItem('from', 'plugin')
+    if (!user) {
+      return
+    }
+    const resp = await fetch('/api/v1/auth/me', {
+      headers: {
+        Authorization: `Bearer ${user.token}`,
+      },
+    })
+    if (!resp.ok) {
+      return
+    }
+    const data = { ...user, ...((await resp.json()) as MeResponse) }
+    localStorage.setItem('user', JSON.stringify(data))
+    document.dispatchEvent(new CustomEvent('LoginSuccess', { detail: { user: data } }))
+    toast.success('Login success, auto close window...')
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+    window.close()
   })
   return (
     <div className="min-h-[80vh] flex flex-col justify-center max-w-md mx-auto space-y-8">

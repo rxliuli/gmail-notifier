@@ -28,6 +28,7 @@ export const Route = createFileRoute('/logged')({
         navigate({ to: '/login', search: { error: 'user_required' } })
         return
       }
+      localStorage.setItem('user', user)
       if (document.querySelector('meta[name="gmail-notifier"]') && sessionStorage.getItem('from') === 'plugin') {
         document.dispatchEvent(new CustomEvent('LoginSuccess', { detail: { user: JSON.parse(user) } }))
         sessionStorage.removeItem('from')
@@ -36,7 +37,6 @@ export const Route = createFileRoute('/logged')({
         window.close()
         return
       }
-      localStorage.setItem('user', user)
       navigate({ to: '/settings' })
     })
     return <div>Loading...</div>
