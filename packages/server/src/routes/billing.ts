@@ -2,9 +2,8 @@ import { Hono } from 'hono'
 import { dbMiddleware } from '../middlewares/db'
 import { Paddle, EventName, Environment, EventEntity } from '@paddle/paddle-node-sdk'
 import { Subscription } from '../db/schema'
-import z from 'zod'
-import { ulid } from 'ulidx'
 import { eq } from 'drizzle-orm'
+import { isEqual } from 'es-toolkit'
 
 const billing = new Hono<{ Bindings: Env }>().use(dbMiddleware())
 
@@ -41,20 +40,43 @@ billing.post('/api/v1/billing/webhook', async (c) => {
   const paddle = new Paddle(c.env.PADDEL_API_KEY, {
     environment: c.env.PADDLE_ENVIRONMENT as Environment,
   })
-  const rawRequestBody = JSON.stringify(c.req.raw.body)
-  const secretKey = c.env.PADDEL_WEBHOOK_SECRET_KEY
+  const rawRequestBody = await c.req.text()
   if (!signature || !rawRequestBody) {
     return c.text('Signature missing in header', 400)
   }
-  let eventData: EventEntity
-  try {
-    // The `unmarshal` function will validate the integrity of the webhook and return an entity
-    eventData = await paddle.webhooks.unmarshal(rawRequestBody, secretKey, signature)
-  } catch (e) {
-    // Handle signature mismatch or other runtime errors
-    console.log(e)
-    return c.text('Signature mismatch', 400)
+  // let eventData: EventEntity
+  // TODO: not working
+  // try {
+  //   const secretKey = c.env.PADDEL_WEBHOOK_SECRET_KEY
+  //   // The `unmarshal` function will validate the integrity of the webhook and return an entity
+  //   eventData = await paddle.webhooks.unmarshal(rawRequestBody, secretKey, signature)
+  // } catch (e) {
+  //   // Handle signature mismatch or other runtime errors
+  //   console.log('Signature mismatch', e)
+  //   return c.text('Signature mismatch', 400)
+  // }
+  const body = JSON.parse(rawRequestBody) as {
+    notification_id: string
+    event_id: string
+    event_type: string
+    occurred_at: string
   }
+  const notification = await paddle.notifications.get(body.notification_id)
+  const isValid =
+    notification.payload.eventId === body.event_id &&
+    notification.payload.eventType === body.event_type &&
+    notification.payload.occurredAt === body.occurred_at
+  if (!isValid) {
+    console.error(
+      'Notification mismatch',
+      JSON.stringify({
+        api: notification.payload,
+        webhook: body,
+      }),
+    )
+    return c.text('Notification mismatch', 400)
+  }
+  const eventData = notification.payload
   const db = c.get('db')
 
   if (eventData.eventType === EventName.SubscriptionCreated) {
