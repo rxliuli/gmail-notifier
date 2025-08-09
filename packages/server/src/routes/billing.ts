@@ -41,7 +41,7 @@ billing.post('/api/v1/billing/webhook', async (c) => {
   const paddle = new Paddle(c.env.PADDEL_API_KEY, {
     environment: c.env.PADDLE_ENVIRONMENT as Environment,
   })
-  const rawRequestBody = await c.req.text()
+  const rawRequestBody = JSON.stringify(c.req.raw.body)
   const secretKey = c.env.PADDEL_WEBHOOK_SECRET_KEY
   if (!signature || !rawRequestBody) {
     return c.text('Signature missing in header', 400)
