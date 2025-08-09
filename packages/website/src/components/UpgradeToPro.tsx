@@ -74,7 +74,10 @@ export function UpgradeToPro() {
       },
     })
   }
-  return user?.currentPeriodEnd && user.currentPeriodEnd > new Date().toISOString() ? (
+  return user &&
+    (user.status === 'active' || user.status === 'canceled') &&
+    user.currentPeriodEnd &&
+    user.currentPeriodEnd > new Date().toISOString() ? (
     <Button size={'lg'} className="w-full" disabled={true}>
       Subscribed
     </Button>
