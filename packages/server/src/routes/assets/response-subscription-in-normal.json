@@ -1,0 +1,94 @@
+{
+  "data": {
+    "id": "sub_01k28q7xgn9egwkfbd36ct0yg0",
+    "status": "active",
+    "customer_id": "ctm_01jgy767qmxegkzgkzn83nnjdp",
+    "address_id": "add_01k28q79bqzyjw464wtyxhk7m9",
+    "business_id": null,
+    "currency_code": "USD",
+    "created_at": "2025-08-10T00:49:12.725Z",
+    "updated_at": "2025-08-11T00:55:35.409Z",
+    "started_at": "2025-08-10T00:49:11.812728Z",
+    "first_billed_at": "2025-08-10T00:49:11.812728Z",
+    "next_billed_at": "2026-08-10T00:49:11.812728Z",
+    "paused_at": null,
+    "canceled_at": null,
+    "collection_mode": "automatic",
+    "billing_details": null,
+    "current_billing_period": {
+      "starts_at": "2025-08-10T00:49:11.812728Z",
+      "ends_at": "2026-08-10T00:49:11.812728Z"
+    },
+    "billing_cycle": {
+      "frequency": 1,
+      "interval": "year"
+    },
+    "scheduled_change": null,
+    "items": [
+      {
+        "status": "active",
+        "quantity": 1,
+        "recurring": true,
+        "created_at": "2025-08-10T00:49:12.726Z",
+        "updated_at": "2025-08-10T00:49:12.726Z",
+        "previously_billed_at": "2025-08-10T00:49:11.812728Z",
+        "next_billed_at": "2026-08-10T00:49:11.812728Z",
+        "trial_dates": null,
+        "price": {
+          "id": "pri_01k10eek26a7jhw364q8mb0km7",
+          "product_id": "pro_01k10ed2xttyzchr2hfzx2avma",
+          "type": "standard",
+          "description": "Subscribe",
+          "name": null,
+          "tax_mode": "internal",
+          "billing_cycle": {
+            "frequency": 1,
+            "interval": "year"
+          },
+          "trial_period": null,
+          "unit_price": {
+            "amount": "1999",
+            "currency_code": "USD"
+          },
+          "unit_price_overrides": [],
+          "custom_data": null,
+          "status": "active",
+          "quantity": {
+            "minimum": 1,
+            "maximum": 999999
+          },
+          "import_meta": null,
+          "created_at": "2025-07-25T09:25:56.934505Z",
+          "updated_at": "2025-07-29T19:54:04.907557Z"
+        },
+        "product": {
+          "id": "pro_01k10ed2xttyzchr2hfzx2avma",
+          "name": "Gmail Notifier",
+          "type": "standard",
+          "tax_category": "standard",
+          "description": "",
+          "image_url": "https://gmail-notifier.rxliuli.com/icon/512.png",
+          "custom_data": {
+            "webhook": "http://gmail-notifier.rxliuli.com/api/v1/billing/webhook"
+          },
+          "status": "active",
+          "created_at": "2025-07-25T09:25:07.642Z",
+          "updated_at": "2025-07-30T01:03:55.78Z"
+        }
+      }
+    ],
+    "custom_data": {
+      "email": "rxliuli@gmail.com",
+      "userId": "01K28NRHVXZG3P8MDC954T3FJ8"
+    },
+    "management_urls": {
+      "update_payment_method": "https://sandbox-customer-portal.paddle.com/cpl_01j6ky2m95zcf0ft0ky7e9xxq3?action=update_subscription_payment_method\u0026subscription_id=sub_01k28q7xgn9egwkfbd36ct0yg0\u0026token=pga_eyJhbGciOiJFZERTQSIsImtpZCI6Imp3a18wMWhkazBuOHF3OG55NTJ5cGNocGNhazA1ayIsInR5cCI6IkpXVCJ9.eyJpZCI6InBnYV8wMWsyYmEwZHc0OTJqejB0czJmNjQ3azlleSIsInNlbGxlci1pZCI6IjIyNDEzIiwidHlwZSI6InN0YW5kYXJkIiwidmVyc2lvbiI6IjEiLCJ1c2FnZSI6ImN1c3RvbWVyLXBvcnRhbC11cmwiLCJzY29wZSI6ImN1c3RvbWVyLmFkanVzdG1lbnQucmVhZCBjdXN0b21lci5jaGVja291dC5jcmVhdGUgY3VzdG9tZXIuY2hlY2tvdXQucmVhZCBjdXN0b21lci5jdXN0b21lci5yZWFkIGN1c3RvbWVyLmN1c3RvbWVyLnVwZGF0ZSBjdXN0b21lci5jdXN0b21lci1hZGRyZXNzLnJlYWQgY3VzdG9tZXIuY3VzdG9tZXItYWRkcmVzcy51cGRhdGUgY3VzdG9tZXIuY3VzdG9tZXItYnVzaW5lc3MucmVhZCBjdXN0b21lci5jdXN0b21lci1idXNpbmVzcy5jcmVhdGUgY3VzdG9tZXIuY3VzdG9tZXItYnVzaW5lc3MudXBkYXRlIGN1c3RvbWVyLmN1c3RvbWVyLXBheW1lbnQtbWV0aG9kLnJlYWQgY3VzdG9tZXIuY3VzdG9tZXItcGF5bWVudC1tZXRob2QuZGVsZXRlIGN1c3RvbWVyLmludm9pY2UucmVhZCBjdXN0b21lci5zdWJzY3JpcHRpb24tY2FuY2VsLmNyZWF0ZSBjdXN0b21lci5zdWJzY3JpcHRpb24tY29uc2VudC1yZXF1aXJlbWVudC1ncmFudC5jcmVhdGUgY3VzdG9tZXIuc3Vic2NyaXB0aW9uLWNvbnNlbnQtcmVxdWlyZW1lbnQucmVhZCBjdXN0b21lci5zdWJzY3JpcHRpb24ucmVhZCBjdXN0b21lci5zdWJzY3JpcHRpb24udXBkYXRlIGN1c3RvbWVyLnRyYW5zYWN0aW9uLmNyZWF0ZSBjdXN0b21lci50cmFuc2FjdGlvbi5yZWFkIGN1c3RvbWVyLnRyYW5zYWN0aW9uLnVwZGF0ZSBjdXN0b21lci50cmFuc2FjdGlvbi5vcmlnaW4ucmVhZCIsImlzcyI6Imd1ZXN0YWNjZXNzLXNlcnZpY2UiLCJzdWIiOiJjdG1fMDFqZ3k3NjdxbXhlZ2t6Z2t6bjgzbm5qZHAiLCJleHAiOjE3NTQ5NjAxMzksImlhdCI6MTc1NDg3MzczOX0.8BxulAxVeABN5n2KEoJjH3jwSsbsaKynYHH2asvM24ETJ48W9QuJvE3kuqZpDso_039GrzkPtA0BT-XA10gUAQ",
+      "cancel": "https://sandbox-customer-portal.paddle.com/cpl_01j6ky2m95zcf0ft0ky7e9xxq3?action=cancel_subscription\u0026subscription_id=sub_01k28q7xgn9egwkfbd36ct0yg0\u0026token=pga_eyJhbGciOiJFZERTQSIsImtpZCI6Imp3a18wMWhkazBuOHF3OG55NTJ5cGNocGNhazA1ayIsInR5cCI6IkpXVCJ9.eyJpZCI6InBnYV8wMWsyYmEwZHc0OTJqejB0czJmNjQ3azlleSIsInNlbGxlci1pZCI6IjIyNDEzIiwidHlwZSI6InN0YW5kYXJkIiwidmVyc2lvbiI6IjEiLCJ1c2FnZSI6ImN1c3RvbWVyLXBvcnRhbC11cmwiLCJzY29wZSI6ImN1c3RvbWVyLmFkanVzdG1lbnQucmVhZCBjdXN0b21lci5jaGVja291dC5jcmVhdGUgY3VzdG9tZXIuY2hlY2tvdXQucmVhZCBjdXN0b21lci5jdXN0b21lci5yZWFkIGN1c3RvbWVyLmN1c3RvbWVyLnVwZGF0ZSBjdXN0b21lci5jdXN0b21lci1hZGRyZXNzLnJlYWQgY3VzdG9tZXIuY3VzdG9tZXItYWRkcmVzcy51cGRhdGUgY3VzdG9tZXIuY3VzdG9tZXItYnVzaW5lc3MucmVhZCBjdXN0b21lci5jdXN0b21lci1idXNpbmVzcy5jcmVhdGUgY3VzdG9tZXIuY3VzdG9tZXItYnVzaW5lc3MudXBkYXRlIGN1c3RvbWVyLmN1c3RvbWVyLXBheW1lbnQtbWV0aG9kLnJlYWQgY3VzdG9tZXIuY3VzdG9tZXItcGF5bWVudC1tZXRob2QuZGVsZXRlIGN1c3RvbWVyLmludm9pY2UucmVhZCBjdXN0b21lci5zdWJzY3JpcHRpb24tY2FuY2VsLmNyZWF0ZSBjdXN0b21lci5zdWJzY3JpcHRpb24tY29uc2VudC1yZXF1aXJlbWVudC1ncmFudC5jcmVhdGUgY3VzdG9tZXIuc3Vic2NyaXB0aW9uLWNvbnNlbnQtcmVxdWlyZW1lbnQucmVhZCBjdXN0b21lci5zdWJzY3JpcHRpb24ucmVhZCBjdXN0b21lci5zdWJzY3JpcHRpb24udXBkYXRlIGN1c3RvbWVyLnRyYW5zYWN0aW9uLmNyZWF0ZSBjdXN0b21lci50cmFuc2FjdGlvbi5yZWFkIGN1c3RvbWVyLnRyYW5zYWN0aW9uLnVwZGF0ZSBjdXN0b21lci50cmFuc2FjdGlvbi5vcmlnaW4ucmVhZCIsImlzcyI6Imd1ZXN0YWNjZXNzLXNlcnZpY2UiLCJzdWIiOiJjdG1fMDFqZ3k3NjdxbXhlZ2t6Z2t6bjgzbm5qZHAiLCJleHAiOjE3NTQ5NjAxMzksImlhdCI6MTc1NDg3MzczOX0.8BxulAxVeABN5n2KEoJjH3jwSsbsaKynYHH2asvM24ETJ48W9QuJvE3kuqZpDso_039GrzkPtA0BT-XA10gUAQ"
+    },
+    "discount": null,
+    "import_meta": null
+  },
+  "meta": {
+    "request_id": "b70bf1af-4e7b-47e0-8f21-83235bbe1e64"
+  }
+}

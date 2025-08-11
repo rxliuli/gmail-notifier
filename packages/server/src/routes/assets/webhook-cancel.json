@@ -1,0 +1,113 @@
+{
+  "data": {
+    "id": "ntf_01k28sj14s7ense60r1k9fppfj",
+    "type": "subscription.updated",
+    "status": "delivered",
+    "payload": {
+      "data": {
+        "id": "sub_01k28q7xgn9egwkfbd36ct0yg0",
+        "items": [
+          {
+            "price": {
+              "id": "pri_01k10eek26a7jhw364q8mb0km7",
+              "name": null,
+              "type": "standard",
+              "status": "active",
+              "quantity": {
+                "maximum": 999999,
+                "minimum": 1
+              },
+              "tax_mode": "internal",
+              "created_at": "2025-07-25T09:25:56.934505Z",
+              "product_id": "pro_01k10ed2xttyzchr2hfzx2avma",
+              "unit_price": {
+                "amount": "1999",
+                "currency_code": "USD"
+              },
+              "updated_at": "2025-07-29T19:54:04.907557Z",
+              "custom_data": null,
+              "description": "Subscribe",
+              "import_meta": null,
+              "trial_period": null,
+              "billing_cycle": {
+                "interval": "year",
+                "frequency": 1
+              },
+              "unit_price_overrides": []
+            },
+            "status": "active",
+            "product": {
+              "id": "pro_01k10ed2xttyzchr2hfzx2avma",
+              "name": "Gmail Notifier",
+              "type": "standard",
+              "status": "active",
+              "image_url": "https://gmail-notifier.rxliuli.com/icon/512.png",
+              "created_at": "2025-07-25T09:25:07.642Z",
+              "updated_at": "2025-07-30T01:03:55.78Z",
+              "custom_data": {
+                "webhook": "http://gmail-notifier.rxliuli.com/api/v1/billing/webhook"
+              },
+              "description": "",
+              "tax_category": "standard"
+            },
+            "quantity": 1,
+            "recurring": true,
+            "created_at": "2025-08-10T00:49:12.726Z",
+            "updated_at": "2025-08-10T00:49:12.726Z",
+            "trial_dates": null,
+            "next_billed_at": null,
+            "previously_billed_at": "2025-08-10T00:49:11.812728Z"
+          }
+        ],
+        "status": "active",
+        "discount": null,
+        "paused_at": null,
+        "address_id": "add_01k28q79bqzyjw464wtyxhk7m9",
+        "created_at": "2025-08-10T00:49:12.725Z",
+        "started_at": "2025-08-10T00:49:11.812728Z",
+        "updated_at": "2025-08-10T01:29:40.612Z",
+        "business_id": null,
+        "canceled_at": null,
+        "custom_data": {
+          "email": "rxliuli@gmail.com",
+          "userId": "01K28NRHVXZG3P8MDC954T3FJ8"
+        },
+        "customer_id": "ctm_01jgy767qmxegkzgkzn83nnjdp",
+        "import_meta": null,
+        "billing_cycle": {
+          "interval": "year",
+          "frequency": 1
+        },
+        "currency_code": "USD",
+        "next_billed_at": null,
+        "billing_details": null,
+        "collection_mode": "automatic",
+        "first_billed_at": "2025-08-10T00:49:11.812728Z",
+        "scheduled_change": {
+          "action": "cancel",
+          "resume_at": null,
+          "effective_at": "2026-08-10T00:49:11.812728Z"
+        },
+        "current_billing_period": {
+          "ends_at": "2026-08-10T00:49:11.812728Z",
+          "starts_at": "2025-08-10T00:49:11.812728Z"
+        }
+      },
+      "event_id": "evt_01k28sj0ns34a6wax4xv31gqds",
+      "event_type": "subscription.updated",
+      "occurred_at": "2025-08-10T01:29:40.793220Z",
+      "notification_id": "ntf_01k28sj14s7ense60r1k9fppfj"
+    },
+    "occurred_at": "2025-08-10T01:29:40.793220Z",
+    "delivered_at": "2025-08-10T01:29:41.524416Z",
+    "replayed_at": null,
+    "origin": "event",
+    "last_attempt_at": "2025-08-10T01:29:41.320077Z",
+    "retry_at": null,
+    "times_attempted": 1,
+    "notification_setting_id": "ntfset_01k10ny9e21vkwk6dbx3y5x1b9"
+  },
+  "meta": {
+    "request_id": "c5fcb70b-a8a5-4807-ab28-be64c5a16a8f"
+  }
+}

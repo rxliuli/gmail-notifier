@@ -52,9 +52,9 @@ export async function googleAuthCallback(c: Pick<Context<{ Bindings: Env }>, 'en
   let currentPeriodEnd = dayjs().add(2, 'week').toISOString()
   let status: InferSelectModel<typeof Subscription>['status'] = 'trialing'
   if (!dbUser) {
-    if (!refreshToken?.token) {
-      return c.redirect(`${baseUrl}/logged?error=refresh_token_not_found`)
-    }
+    // if (!refreshToken?.token) {
+    //   return c.redirect(`${baseUrl}/logged?error=refresh_token_not_found`)
+    // }
     await db.batch([
       db.insert(User).values({
         id: userId,
@@ -63,10 +63,10 @@ export async function googleAuthCallback(c: Pick<Context<{ Bindings: Env }>, 'en
         image: googleUser.picture,
         createdAt: now,
         updatedAt: now,
-        refreshToken: refreshToken.token,
-        refreshTokenExpiresAt: refreshToken.expires_in
+        refreshToken: refreshToken?.token ?? '',
+        refreshTokenExpiresAt: refreshToken?.expires_in
           ? new Date(Date.now() + refreshToken.expires_in * 1000).toISOString()
-          : null,
+          : undefined,
       }),
       db.insert(Account).values({
         id: ulid(),

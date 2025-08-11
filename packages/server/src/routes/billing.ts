@@ -1,9 +1,16 @@
-import { Hono } from 'hono'
+import { Context, Hono } from 'hono'
 import { dbMiddleware } from '../middlewares/db'
-import { Paddle, EventName, Environment, EventEntity } from '@paddle/paddle-node-sdk'
+import {
+  Paddle,
+  EventName,
+  Environment,
+  SubscriptionCreatedEvent,
+  SubscriptionUpdatedEvent,
+} from '@paddle/paddle-node-sdk'
 import { Subscription } from '../db/schema'
 import { eq } from 'drizzle-orm'
-import { isEqual } from 'es-toolkit'
+import { jwtAuthMiddleware } from '../middlewares/auth'
+import { DrizzleD1Database } from 'drizzle-orm/d1'
 
 const billing = new Hono<{ Bindings: Env }>().use(dbMiddleware())
 
@@ -16,6 +23,103 @@ const sandboxIPs = [
   '100.20.172.113',
 ]
 const liveIPs = ['34.232.58.13', '34.195.105.136', '34.237.3.244', '35.155.119.135', '52.11.166.252', '34.212.5.7']
+
+async function handleSubscriptionCreated(c: Context, db: DrizzleD1Database, eventData: SubscriptionCreatedEvent) {
+  const customData = eventData.data.customData
+  if (!customData || !('userId' in customData) || typeof customData.userId !== 'string') {
+    console.log('Invalid custom data', customData)
+    return c.text('Invalid custom data', 400)
+  }
+  const subscription = await db
+    .select()
+    .from(Subscription)
+    .where(eq(Subscription.userId, customData.userId))
+    .limit(1)
+    .get()
+  if (!subscription) {
+    console.log('Subscription not found', customData.userId)
+    return c.text('Subscription not found', 400)
+  }
+  await db
+    .update(Subscription)
+    .set({
+      userId: customData.userId,
+      customerId: eventData.data.customerId,
+      status: 'active',
+      plan: 'pro',
+      currentPeriodEnd: eventData.data.nextBilledAt!,
+      paddleSubscriptionId: eventData.data.id,
+      paddleTransactionId: eventData.data.transactionId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    })
+    .where(eq(Subscription.id, subscription.id))
+  console.log('Subscription created', JSON.stringify(eventData.data))
+  return c.text('Subscription created')
+}
+
+async function handleSubscriptionUpdated(c: Context, db: DrizzleD1Database, eventData: SubscriptionUpdatedEvent) {
+  const customData = eventData.data.customData
+  if (!customData || !('userId' in customData) || typeof customData.userId !== 'string') {
+    console.log('Invalid custom data', customData)
+    return c.text('Invalid custom data', 400)
+  }
+  const subscription = await db
+    .select()
+    .from(Subscription)
+    .where(eq(Subscription.userId, customData.userId))
+    .limit(1)
+    .get()
+  if (!subscription) {
+    console.log('Subscription not found', eventData.data)
+    return c.text('Subscription not found', 400)
+  }
+  let newStatus: 'active' | 'canceled' | 'expired' | 'trialing'
+  const status = eventData.data.status
+  const action = eventData.data.scheduledChange?.action
+  if (action) {
+    switch (action) {
+      case 'resume':
+        newStatus = 'active'
+        break
+      case 'cancel':
+        newStatus = 'canceled'
+        break
+      case 'pause':
+        newStatus = 'canceled'
+        break
+      default:
+        newStatus = 'expired'
+    }
+  } else {
+    switch (status) {
+      case 'active':
+        newStatus = 'active'
+        break
+      case 'canceled':
+      case 'paused':
+        newStatus = 'canceled'
+        break
+      case 'trialing':
+        newStatus = 'trialing'
+        break
+      case 'past_due':
+        newStatus = 'expired'
+        break
+      default:
+        newStatus = 'expired'
+    }
+  }
+  await db
+    .update(Subscription)
+    .set({
+      status: newStatus,
+      currentPeriodEnd: eventData.data.nextBilledAt ?? subscription.currentPeriodEnd,
+    })
+    .where(eq(Subscription.id, subscription.id))
+  console.log('Subscription updated', JSON.stringify(eventData.data))
+  return c.text('Subscription updated')
+}
 
 // https://developer.paddle.com/build/guides/checkout/webhooks/events
 billing.post('/api/v1/billing/webhook', async (c) => {
@@ -80,60 +184,86 @@ billing.post('/api/v1/billing/webhook', async (c) => {
   const db = c.get('db')
 
   if (eventData.eventType === EventName.SubscriptionCreated) {
-    const customData = eventData.data.customData
-    if (!customData || !('userId' in customData) || typeof customData.userId !== 'string') {
-      console.log('Invalid custom data', customData)
-      return c.text('Invalid custom data', 400)
-    }
-    const subscription = await db
-      .select()
-      .from(Subscription)
-      .where(eq(Subscription.userId, customData.userId))
-      .limit(1)
-      .get()
-    if (!subscription) {
-      console.log('Subscription not found', customData.userId)
-      return c.text('Subscription not found', 400)
-    }
-    await db
-      .update(Subscription)
-      .set({
-        userId: customData.userId,
-        customerId: eventData.data.customerId,
-        status: 'active',
-        plan: 'pro',
-        currentPeriodEnd: eventData.data.nextBilledAt!,
-        paddleSubscriptionId: eventData.data.id,
-        paddleTransactionId: eventData.data.transactionId,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      })
-      .where(eq(Subscription.id, subscription.id))
-    console.log('Subscription created', eventData.data)
-    return c.text('Subscription created')
+    return await handleSubscriptionCreated(c, db, eventData)
   } else if (eventData.eventType === EventName.SubscriptionUpdated) {
-    const subscription = await db
-      .select()
-      .from(Subscription)
-      .where(eq(Subscription.customerId, eventData.data.customerId))
-      .limit(1)
-      .get()
-    if (!subscription) {
-      console.log('Subscription not found', eventData.data)
-      return c.text('Subscription not found', 400)
-    }
-    const status = eventData.data.status
-    await db
-      .update(Subscription)
-      .set({
-        status: status === 'active' ? 'active' : status === 'paused' || status === 'canceled' ? 'canceled' : 'expired',
-        currentPeriodEnd: eventData.data.nextBilledAt ?? subscription.currentPeriodEnd,
-      })
-      .where(eq(Subscription.id, subscription.id))
-    console.log('Subscription updated', eventData.data)
-    return c.text('Subscription updated')
+    return await handleSubscriptionUpdated(c, db, eventData)
   }
   return c.text('Processed webhook event')
+})
+
+billing.post('/api/v1/billing/cancel', jwtAuthMiddleware(), async (c) => {
+  const payload = c.get('jwtPayload')
+  if (!payload) {
+    return c.json({ error: 'User not found' }, 400)
+  }
+  const db = c.get('db')
+  const subscription = await db.select().from(Subscription).where(eq(Subscription.userId, payload.userId)).get()
+  if (!subscription) {
+    return c.json({ error: 'Subscription not found' }, 404)
+  }
+  if (subscription.status !== 'active' || !subscription.paddleSubscriptionId) {
+    return c.json({ error: 'Subscription is not active' }, 404)
+  }
+  const paddle = new Paddle(c.env.PADDEL_API_KEY, {
+    environment: c.env.PADDLE_ENVIRONMENT as Environment,
+  })
+  try {
+    const sub = await paddle.subscriptions.get(subscription.paddleSubscriptionId)
+    if (sub.scheduledChange) {
+      console.error('Subscription is scheduled to be canceled', sub)
+      return c.json({ error: 'Subscription is scheduled to be canceled' }, 400)
+    }
+    const cancel = await paddle.subscriptions.cancel(subscription.paddleSubscriptionId)
+    if (cancel.scheduledChange?.action !== 'cancel') {
+      return c.json({ error: 'Failed to cancel subscription' }, 500)
+    }
+  } catch (err) {
+    console.error('Failed to cancel subscription', err)
+    return c.json({ error: 'Failed to cancel subscription' }, 500)
+  }
+  await db.update(Subscription).set({ status: 'canceled' }).where(eq(Subscription.id, subscription.id))
+  return c.json({ message: 'Subscription canceled' })
+})
+
+billing.post('/api/v1/billing/reactivate', jwtAuthMiddleware(), async (c) => {
+  const payload = c.get('jwtPayload')
+  if (!payload) {
+    return c.json({ error: 'User not found' }, 400)
+  }
+  const db = c.get('db')
+  const subscription = await db.select().from(Subscription).where(eq(Subscription.userId, payload.userId)).get()
+  if (!subscription) {
+    return c.json({ error: 'Subscription not found' }, 404)
+  }
+  if (subscription.status !== 'canceled' || !subscription.paddleSubscriptionId) {
+    return c.json({ error: 'Subscription is not canceled' }, 404)
+  }
+  if (new Date(subscription.currentPeriodEnd) < new Date()) {
+    return c.json({ error: 'Subscription is expired' }, 400)
+  }
+  const paddle = new Paddle(c.env.PADDEL_API_KEY, {
+    environment: c.env.PADDLE_ENVIRONMENT as Environment,
+  })
+  try {
+    const sub = await paddle.subscriptions.get(subscription.paddleSubscriptionId)
+    if (sub.status !== 'active') {
+      return c.json({ error: 'Subscription is not active' }, 400)
+    }
+    if (sub.scheduledChange?.action !== 'cancel') {
+      return c.json({ error: 'Subscription is scheduled to be canceled' }, 400)
+    }
+    const reactivate = await paddle.subscriptions.update(subscription.paddleSubscriptionId, {
+      scheduledChange: null,
+    })
+    if (reactivate.scheduledChange !== null) {
+      return c.json({ error: 'Failed to reactivate subscription' }, 500)
+    }
+  } catch (err) {
+    console.error('Failed to reactivate subscription', err)
+    return c.json({ error: 'Failed to reactivate subscription' }, 500)
+  }
+  await db.update(Subscription).set({ status: 'active' }).where(eq(Subscription.id, subscription.id))
+  return c.json({ message: 'Subscription reactivated' }, 200)
 })
 
 export { billing }

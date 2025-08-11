@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
 import { User, CreditCard, LogOut } from 'lucide-react'
 import { getLocalUser, useLocalUser } from '~/lib/useAuth'
@@ -7,6 +7,7 @@ import 'dayjs/plugin/duration'
 import dayjs from 'dayjs'
 import { useMemo } from 'react'
 import { Button } from '~/components/ui/button'
+import { toast } from 'sonner'
 
 export const Route = createFileRoute('/settings')({
   component: Settings,
@@ -43,10 +44,56 @@ function Settings() {
       expired: 'Expired',
     }
     return {
-      status: statusMap[query.data.status],
+      status: duration >= 0 ? statusMap[query.data.status] : 'Expired',
       daysRemaining: duration,
     }
   }, [query.data])
+  const cancelSubscription = useMutation({
+    mutationFn: async () => {
+      const user = getLocalUser()
+      if (!user) {
+        throw new Error('User not found')
+      }
+      const resp = await fetch('/api/v1/billing/cancel', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${user.token}`,
+        },
+      })
+      if (!resp.ok) {
+        throw new Error('Failed to cancel subscription')
+      }
+      toast.success('Subscription canceled, you will still have access until the end of the current period.')
+      query.refetch()
+    },
+    onError: (error) => {
+      console.error('Failed to cancel subscription', error)
+      toast.error('Failed to cancel subscription')
+    },
+  })
+  const reactivateSubscription = useMutation({
+    mutationFn: async () => {
+      const user = getLocalUser()
+      if (!user) {
+        throw new Error('User not found')
+      }
+      const resp = await fetch('/api/v1/billing/reactivate', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${user.token}`,
+        },
+      })
+      if (!resp.ok) {
+        throw new Error('Failed to reactivate subscription')
+      }
+      toast.success('Subscription reactivated')
+      query.refetch()
+    },
+    onError: (error) => {
+      console.error('Failed to reactivate subscription', error)
+      toast.error('Failed to reactivate subscription')
+    },
+  })
   return (
     <div className="min-h-[80vh] max-w-4xl mx-auto space-y-8">
       <div className="space-y-4">
@@ -69,7 +116,9 @@ function Settings() {
             <div>
               <h3 className="font-medium">Subscription Status</h3>
               <p className="text-sm text-muted-foreground">
-                {subscription?.status} ({subscription?.daysRemaining} days remaining)
+                {subscription?.daysRemaining && subscription.daysRemaining >= 0
+                  ? `${subscription?.status} (${subscription?.daysRemaining} days remaining)`
+                  : `${subscription?.status}`}
               </p>
             </div>
           </div>
@@ -82,8 +131,16 @@ function Settings() {
             <h2 className="text-xl font-semibold">Subscription</h2>
           </div>
           <div className="space-y-4">
-            {query.data?.status === 'active' ? (
-              <Button variant={'destructive'}>Cancel Subscription</Button>
+            {subscription?.daysRemaining && subscription?.daysRemaining < 0 ? (
+              <Link to="/pricing">
+                <Button>Subscribe</Button>
+              </Link>
+            ) : query.data?.status === 'active' ? (
+              <Button variant={'destructive'} onClick={() => cancelSubscription.mutate()}>
+                Cancel Subscription
+              </Button>
+            ) : query.data?.status === 'canceled' ? (
+              <Button onClick={() => reactivateSubscription.mutate()}>Reactivate Subscription</Button>
             ) : (
               <Link to="/pricing">
                 <Button>Subscribe</Button>

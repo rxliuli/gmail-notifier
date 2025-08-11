@@ -4,7 +4,7 @@ import { User } from '../db/schema'
 import { googleAuthCallback, MeResponse } from './auth'
 import { Context } from 'hono'
 import { pick } from 'es-toolkit'
-import { GoogleTokenResponse, GoogleUser } from '@hono/oauth-providers/google'
+import { GoogleUser } from '@hono/oauth-providers/google'
 
 const c = initCloudflareTest()
 
@@ -73,8 +73,7 @@ describe('login', () => {
     const user = url.searchParams.get('user')
     expect(user).not.undefined
     const userData = JSON.parse(user!) as MeResponse
-    expect(userData.refreshToken).not.undefined
-    expect(userData.refreshTokenExpiresAt).not.undefined
+    expect(userData.token).not.undefined
     expect(userData.status).eq('trialing')
     expect(await c.db.$count(User)).eq(2)
   })
