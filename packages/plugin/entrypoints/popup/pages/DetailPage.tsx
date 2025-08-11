@@ -98,7 +98,9 @@ const MailMessage = function MailMessage(props: {
               <span className="font-semibold text-foreground">{message.senderName}</span>
               <span className="text-muted-foreground ml-2">&lt;{message.senderEmail}&gt;</span>
             </div>
-            <span className="text-xs text-muted-foreground">{dayjs(message.time).format('YYYY-MM-DD HH:mm')}</span>
+            <span className="text-xs text-muted-foreground whitespace-nowrap">
+              {dayjs(message.time).format('YYYY-MM-DD HH:mm')}
+            </span>
           </div>
           <div className="text-sm text-muted-foreground mt-1">
             <div>To: {message.to.join(', ')}</div>
