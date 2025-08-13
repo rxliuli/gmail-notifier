@@ -27,8 +27,9 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { FaDiscord, FaGithub, FaGoogle } from 'react-icons/fa'
 import { EmailThread } from '@/lib/StateManager'
-import { getUser, login, logout } from '@/lib/auth'
+import { getUser, login, logout, setUser } from '@/lib/auth'
 import { useEffectOnce } from '@/lib/utils/useEffectOnce'
+import { MeResponse } from '@gmail-notifier/server'
 
 function MailItem({ thread, onClick }: { thread: EmailThread; onClick: () => void }) {
   const store = useMailStore()
@@ -213,6 +214,33 @@ function MailList({ threads, onSelectFeed }: { threads: EmailThread[]; onSelectF
 }
 
 function HomePage() {
+  const userState = useQuery({
+    queryKey: ['user'],
+    queryFn: async () => {
+      const localUser = await getUser()
+      if (localUser?.token) {
+        const baseUrl = import.meta.env.VITE_API_URL ?? 'https://gmail-notifier.rxliuli.com'
+        await fetch(baseUrl + '/api/v1/auth/me', {
+          headers: {
+            Authorization: `Bearer ${localUser.token}`,
+          },
+        })
+          .then(async (resp) => {
+            if (!resp.ok) {
+              alert('Subscription failed')
+              return
+            }
+            const data = (await resp.json()) as MeResponse
+            await setUser({ ...localUser, ...data })
+          })
+          .catch((err) => {
+            console.error('fetch user failed', err)
+          })
+      }
+      return localUser ?? null
+    },
+    staleTime: 1000 * 60 * 5,
+  })
   const store = useMailStore()
   async function onSelectFeed(thread: EmailThread) {
     store.go(thread)
@@ -220,6 +248,25 @@ function HomePage() {
       cmd: 'viewed',
       url: thread.url,
     })
+  }
+  if (userState.isLoading) {
+    return <div>Loading...</div>
+  }
+  if (!userState.data?.id) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen">
+        <Button onClick={() => login()}>Please login to Gmail-Notifier</Button>
+      </div>
+    )
+  }
+  if (dayjs(userState.data.currentPeriodEnd).isBefore(dayjs())) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen">
+        <a href={'https://gmail-notifier.rxliuli.com/pricing'} target="_blank">
+          <Button>Please subscribe to continue</Button>
+        </a>
+      </div>
+    )
   }
   if (!store.email) {
     return (

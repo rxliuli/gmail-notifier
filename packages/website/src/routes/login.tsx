@@ -33,9 +33,9 @@ function Login() {
     const data = { ...user, ...((await resp.json()) as MeResponse) }
     localStorage.setItem('user', JSON.stringify(data))
     document.dispatchEvent(new CustomEvent('LoginSuccess', { detail: { user: data } }))
-    toast.success('Login success, auto close window...')
+    toast.success('Login success, auto open gmail...')
     await new Promise((resolve) => setTimeout(resolve, 1000))
-    window.close()
+    location.href = 'https://mail.google.com/mail/u/0/#inbox'
   })
   return (
     <div className="min-h-[80vh] flex flex-col justify-center max-w-md mx-auto space-y-8">

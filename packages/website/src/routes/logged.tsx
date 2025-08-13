@@ -32,9 +32,9 @@ export const Route = createFileRoute('/logged')({
       if (document.querySelector('meta[name="gmail-notifier"]') && sessionStorage.getItem('from') === 'plugin') {
         document.dispatchEvent(new CustomEvent('LoginSuccess', { detail: { user: JSON.parse(user) } }))
         sessionStorage.removeItem('from')
-        toast.success('Login success, auto close window...')
+        toast.success('Login success, auto open gmail...')
         await new Promise((resolve) => setTimeout(resolve, 1000))
-        window.close()
+        location.href = 'https://mail.google.com/mail/u/0/#inbox'
         return
       }
       navigate({ to: '/settings' })

@@ -22,8 +22,11 @@ function AuthInfo() {
         localStorage.removeItem('user')
         return null
       }
-      const data = (await resp.json()) as MeResponse
-      localStorage.setItem('user', JSON.stringify({ ...localUser, ...data }))
+      const data = { ...localUser, ...((await resp.json()) as MeResponse) }
+      localStorage.setItem('user', JSON.stringify(data))
+      if (document.querySelector('meta[name="gmail-notifier"]')) {
+        document.dispatchEvent(new CustomEvent('LoginSuccess', { detail: { user: data } }))
+      }
       return data
     },
   })

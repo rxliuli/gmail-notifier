@@ -9,7 +9,7 @@ export function login(prompt?: 'consent') {
   if (prompt === 'consent') {
     url.searchParams.set('prompt', prompt)
   }
-  openLoginWindow(url.toString())
+  window.open(url.toString(), '_blank')
 }
 
 export async function setUser(user: MeResponse) {

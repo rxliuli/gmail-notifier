@@ -13,6 +13,7 @@ export default defineContentScript({
 
     document.addEventListener('LoginSuccess', async (event) => {
       const { user } = (event as CustomEvent).detail
+      console.log('LoginSuccess', user)
       await setUser(user)
     })
   },
