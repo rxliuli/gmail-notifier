@@ -220,7 +220,8 @@ function HomePage() {
       const localUser = await getUser()
       if (localUser?.token) {
         const baseUrl = import.meta.env.VITE_API_URL ?? 'https://gmail-notifier.rxliuli.com'
-        await fetch(baseUrl + '/api/v1/auth/me', {
+        // don't await
+        fetch(baseUrl + '/api/v1/auth/me', {
           headers: {
             Authorization: `Bearer ${localUser.token}`,
           },
