@@ -283,7 +283,7 @@ export function extractGmailInfo(url: string) {
 
 // IK/AT cache
 const ikCache = new Map<string, string>()
-const atCache = new Lru<string>(100, 1000 * 60 * 60)
+const atCache = new Lru<string>(100, 0) // disable at cache
 
 export async function getIk(n: string): Promise<string | null> {
   if (ikCache.has(n)) {
