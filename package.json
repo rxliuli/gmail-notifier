@@ -26,5 +26,6 @@
     "patchedDependencies": {
       "@hono/oauth-providers": "patches/@hono__oauth-providers.patch"
     }
-  }
+  },
+  "version": "0.0.1"
 }
