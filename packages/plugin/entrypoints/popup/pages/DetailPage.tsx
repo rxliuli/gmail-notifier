@@ -1,23 +1,10 @@
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { getOpenWebLink, openMailInWeb, parseReplyTo, ThreadMail } from '@/lib/api/gmail'
+import { getOpenWebLink, openMailInWeb, ThreadMail } from '@/lib/api/gmail'
 import { useMailStore } from '@/lib/mailStore'
 import dayjs from 'dayjs'
-import {
-  ArrowLeftIcon,
-  ExternalLinkIcon,
-  PaperclipIcon,
-  ChevronsUpDownIcon,
-  ChevronsDownUpIcon,
-  SendIcon,
-  Loader2Icon,
-} from 'lucide-react'
-import { memo, useState, useCallback, useRef } from 'react'
+import { ArrowLeftIcon, ExternalLinkIcon, PaperclipIcon, ChevronsUpDownIcon, ChevronsDownUpIcon } from 'lucide-react'
+import { memo, useRef } from 'react'
 import root from 'react-shadow'
-import { useMutation } from '@tanstack/react-query'
-import { toast } from 'sonner'
-import { encodeRFC2047, generateAccessToken, getMessage, replyEmail } from '@/lib/api/gcp'
-import { cleanAuth, getAccessToken, getUser, login, setAccessToken } from '@/lib/auth'
 import { useCollapseStore } from '@/lib/collapseStore'
 
 const MailContent = memo((props: { contentHtml: string }) => (
@@ -177,152 +164,13 @@ export function DetailPage() {
           })}
         </div>
       </div>
-      {/* <MailSender /> */}
     </div>
   )
 }
 
-function MailSender() {
-  const store = useMailStore()
-  const thread = store.thread!
-  const [message, setMessage] = useState('')
-
-  const sendMailMutation = useMutation({
-    mutationFn: async (content: string) => {
-      const user = await getUser()
-      if (!user?.token) {
-        throw new Error('User not found')
-      }
-      const messageId = new URL(thread.url).searchParams.get('message_id')
-      if (!messageId) {
-        throw new Error('Message ID not found')
-      }
-      const to = thread.messages.find((it) => it.senderEmail !== user.email)
-      if (!to) {
-        throw new Error('No reply to email found')
-      }
-      let accessToken = await getAccessToken()
-      if (!accessToken || new Date(accessToken.expiresAt) < new Date()) {
-        const accessToken = await generateAccessToken(user.token)
-        await setAccessToken(accessToken)
-      }
-      accessToken = await getAccessToken()
-      if (!accessToken) {
-        throw new Error('No access token found')
-      }
-      const message = await getMessage({
-        accessToken: accessToken.accessToken,
-        messageId: messageId,
-      })
-      const inReplyTo = message.payload.headers.find((it) => it.name === 'In-Reply-To')?.value
-      const references = message.payload.headers.find((it) => it.name === 'References')?.value
-      if (!inReplyTo || !references) {
-        throw new Error('No in reply to or references found')
-      }
-      const resp = await replyEmail({
-        accessToken: accessToken.accessToken,
-        messageId: messageId,
-        subject: thread.subject,
-        content,
-        from: user.name ? `${encodeRFC2047(user.name)} <${user.email}>` : user.email,
-        to: to.senderName ? `${encodeRFC2047(to.senderName)} <${to.senderEmail}>` : to.senderEmail,
-        inReplyTo: inReplyTo,
-        references: references,
-        threadId: message.threadId,
-      })
-      if (resp.status !== 200) {
-        throw new Error('Send mail failed')
-      }
-      return { success: true }
-    },
-    onSuccess: () => {
-      setMessage('')
-      toast.success('Send mail success')
-    },
-    onError: (err) => {
-      if (err instanceof Response) {
-        if (err.status === 401) {
-          toast.info('Please login again', {
-            action: {
-              label: 'Login',
-              onClick: async () => {
-                await cleanAuth()
-                login('consent')
-              },
-            },
-          })
-          return
-        }
-      }
-      console.error('Send mail failed', err)
-      toast.error('Send mail failed')
-    },
-  })
-
-  function handleSend() {
-    if (!message.trim()) {
-      return
-    }
-    sendMailMutation.mutate(message.trim())
-  }
-
-  function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-      e.preventDefault()
-      handleSend()
-    }
-  }
-
-  const isDisabled = sendMailMutation.isPending || !message.trim()
-
-  const inputRef = useRef<HTMLInputElement>(null)
-  async function onFoucs() {
-    const user = await getUser()
-    console.log('user', user)
-    if (user) {
-      return
-    }
-    inputRef.current?.blur()
-    toast.info('You need to login first to reply', {
-      action: {
-        label: 'Login',
-        onClick: async () => {
-          await cleanAuth()
-          login('consent')
-        },
-      },
-    })
-  }
-
-  return (
-    <div className="sticky bottom-0 bg-background border-t border-border p-3">
-      <div className="flex gap-3 items-end">
-        <Input
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Input reply content... (Cmd/Ctrl + Enter to send)"
-          className="min-h-[50px] max-h-[100px] flex-1"
-          disabled={sendMailMutation.isPending}
-          ref={inputRef}
-          onFocus={onFoucs}
-        />
-        <Button
-          onClick={handleSend}
-          disabled={isDisabled}
-          size="icon"
-          className="h-[50px] w-[50px] shrink-0 rounded-full"
-        >
-          {sendMailMutation.isPending ? (
-            <Loader2Icon className="h-4 w-4 animate-spin" />
-          ) : (
-            <SendIcon className="h-4 w-4" />
-          )}
-        </Button>
-      </div>
-    </div>
-  )
-}
+// MailSender component removed - reply functionality requires user authentication
+// which has been removed from this version. If you want to add reply functionality,
+// consider implementing it using Gmail's web interface directly.
 
 function DetailToolbar(props: { allCollapsed: boolean; onToggleAll: () => void }) {
   const store = useMailStore()

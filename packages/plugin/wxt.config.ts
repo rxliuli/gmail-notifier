@@ -5,6 +5,10 @@ export default defineConfig({
   modules: ['@wxt-dev/module-react'],
   vite: () => ({
     plugins: [tailwindcss()] as any,
+    build: {
+      minify: false,
+      sourcemap: true,
+    },
   }),
   manifestVersion: 3,
   zip: {
@@ -15,11 +19,7 @@ export default defineConfig({
       name: 'Gmail Notifier',
       description: 'Gmail Notifier on Browser',
       permissions: ['storage', 'cookies', 'alarms', 'notifications', 'webRequest', 'idle', 'contextMenus'],
-      host_permissions: [
-        'https://mail.google.com/**',
-        'https://gmail.googleapis.com/gmail/v1/**',
-        'https://gmail-notifier.rxliuli.com/**',
-      ],
+      host_permissions: ['https://mail.google.com/**', 'https://store.rxliuli.com/**'],
       author: {
         email: 'rxliuli@gmail.com',
       },
@@ -32,7 +32,7 @@ export default defineConfig({
           '128': 'icon/128.png',
         },
       },
-      homepage_url: 'https://rxliuli.com/projects/gmail-notifier',
+      homepage_url: 'https://store.rxliuli.com/extensions/gmail-notifier/',
     }
     if (env.browser === 'chrome' || env.browser === 'edge') {
       manifest.permissions!.push('offscreen')

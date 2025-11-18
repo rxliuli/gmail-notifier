@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button'
 import { openMailInWeb, newEmail } from '@/lib/api/gmail'
 import { bgMessager, GmailAction, popupMessager } from '@/lib/messager'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import {
   BanIcon,
@@ -12,6 +12,7 @@ import {
   MoreVerticalIcon,
   SquareArrowOutUpRightIcon,
   MailPlusIcon,
+  KeyIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { RefreshIcon } from '@/components/extra/RefreshIcon'
@@ -25,11 +26,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { FaDiscord, FaGithub, FaGoogle } from 'react-icons/fa'
+import { FaDiscord, FaGithub } from 'react-icons/fa'
 import { EmailThread } from '@/lib/StateManager'
-import { getUser, login, logout, setUser } from '@/lib/auth'
+import { getCurrentPlan, activate } from '@/lib/activation'
+import { useState } from 'react'
+import { Input } from '@/components/ui/input'
+import { get, set } from 'idb-keyval'
+import { useMount } from '@/lib/utils/useMount'
 import { useEffectOnce } from '@/lib/utils/useEffectOnce'
-import { MeResponse } from '@gmail-notifier/server'
 
 function MailItem({ thread, onClick }: { thread: EmailThread; onClick: () => void }) {
   const store = useMailStore()
@@ -99,7 +103,7 @@ function MailItem({ thread, onClick }: { thread: EmailThread; onClick: () => voi
   )
 }
 
-function Toolbar() {
+function Toolbar({ onShowLicense }: { onShowLicense: () => void }) {
   const store = useMailStore()
   const refreshMutation = useMutation({
     mutationFn: () => bgMessager.sendMessage('refreshThreads', undefined),
@@ -118,10 +122,7 @@ function Toolbar() {
     }
   }
 
-  const userState = useQuery({
-    queryKey: ['user'],
-    queryFn: getUser,
-  })
+  const plan = getCurrentPlan()
 
   return (
     <div className="flex items-center px-4 py-2 bg-card shadow-sm border-b border-border gap-2 sticky top-0 z-10">
@@ -170,14 +171,10 @@ function Toolbar() {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align={'end'}>
-          {userState.data?.id ? (
-            <DropdownMenuItem onClick={logout}>{userState.data.email} Logout</DropdownMenuItem>
-          ) : (
-            <DropdownMenuItem onClick={() => login()}>
-              <FaGoogle />
-              Login
-            </DropdownMenuItem>
-          )}
+          <DropdownMenuItem onClick={onShowLicense}>
+            <KeyIcon />
+            {plan.tier === 'free' ? 'Enter License' : `License: ${plan.tier}`}
+          </DropdownMenuItem>
           <DropdownMenuItem asChild>
             <a href={`chrome-extension://${browser.runtime.id}/popup.html`} target="_blank">
               <SquareArrowOutUpRightIcon />
@@ -213,36 +210,73 @@ function MailList({ threads, onSelectFeed }: { threads: EmailThread[]; onSelectF
   )
 }
 
-function HomePage() {
-  const userState = useQuery({
-    queryKey: ['user'],
-    queryFn: async () => {
-      const localUser = await getUser()
-      if (localUser?.token) {
-        const baseUrl = import.meta.env.VITE_API_URL ?? 'https://gmail-notifier.rxliuli.com'
-        // don't await
-        fetch(baseUrl + '/api/v1/auth/me', {
-          headers: {
-            Authorization: `Bearer ${localUser.token}`,
-          },
-        })
-          .then(async (resp) => {
-            if (!resp.ok) {
-              alert('Subscription failed')
-              return
-            }
-            const data = (await resp.json()) as MeResponse
-            await setUser({ ...localUser, ...data })
-          })
-          .catch((err) => {
-            console.error('fetch user failed', err)
-          })
+function LicenseDialog({ onClose, onActivated }: { onClose: () => void; onActivated: () => void }) {
+  const [code, setCode] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  async function handleActivate() {
+    if (!code.trim()) {
+      toast.error('Please enter a license code')
+      return
+    }
+    setLoading(true)
+    try {
+      const result = await activate(code.trim())
+      if (result.success) {
+        toast.success('License activated successfully!')
+        onActivated()
+        onClose()
+      } else {
+        toast.error(result.message || 'Activation failed')
       }
-      return localUser ?? null
-    },
-    staleTime: 1000 * 60 * 5,
-  })
+    } catch (error) {
+      console.error('Activation error:', error)
+      toast.error('Activation failed. Please check your license code.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-card p-6 rounded-lg shadow-lg max-w-md w-full mx-4">
+        <h2 className="text-xl font-bold mb-4">Enter License Code</h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          Gmail Notifier is free to evaluate. If you find it useful, please consider purchasing a license to support
+          development.
+        </p>
+        <Input
+          placeholder="Enter your license code"
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleActivate()}
+          className="mb-4"
+          autoFocus
+        />
+        <div className="flex gap-2 justify-end">
+          <Button variant="outline" onClick={onClose} disabled={loading}>
+            Cancel
+          </Button>
+          <Button onClick={handleActivate} disabled={loading}>
+            {loading ? 'Activating...' : 'Activate'}
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground mt-4">
+          Don't have a license?{' '}
+          <a href="https://gmail-notifier.rxliuli.com/pricing" target="_blank" className="underline">
+            Purchase one here
+          </a>
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function HomePage() {
   const store = useMailStore()
+  const [showLicense, setShowLicense] = useState(false)
+  const [, forceUpdate] = useState({})
+
   async function onSelectFeed(thread: EmailThread) {
     store.go(thread)
     await bgMessager.sendMessage('gmailAction', {
@@ -250,25 +284,22 @@ function HomePage() {
       url: thread.url,
     })
   }
-  if (userState.isLoading) {
-    return <div>Loading...</div>
-  }
-  if (!userState.data?.id) {
-    return (
-      <div className="flex flex-col items-center justify-center h-screen">
-        <Button onClick={() => login()}>Please login to Gmail-Notifier</Button>
-      </div>
-    )
-  }
-  if (dayjs(userState.data.currentPeriodEnd).isBefore(dayjs())) {
-    return (
-      <div className="flex flex-col items-center justify-center h-screen">
-        <a href={'https://gmail-notifier.rxliuli.com/pricing'} target="_blank">
-          <Button>Please subscribe to continue</Button>
-        </a>
-      </div>
-    )
-  }
+
+  // Check if we should show monthly reminder
+  useMount(async () => {
+    const plan = getCurrentPlan()
+    if (plan.tier === 'free') {
+      const lastReminder = await get<string>('lastLicenseReminder')
+      const now = Date.now()
+      const oneMonth = 30 * 24 * 60 * 60 * 1000
+
+      if (!lastReminder || now - new Date(lastReminder).getTime() > oneMonth) {
+        await set('lastLicenseReminder', new Date().toISOString())
+        setShowLicense(true)
+      }
+    }
+  })
+
   if (!store.email) {
     return (
       <div className="flex flex-col items-center justify-center h-screen">
@@ -278,11 +309,13 @@ function HomePage() {
       </div>
     )
   }
+
   return (
     <>
+      {showLicense && <LicenseDialog onClose={() => setShowLicense(false)} onActivated={() => forceUpdate({})} />}
       {store.email && (
         <div>
-          <Toolbar />
+          <Toolbar onShowLicense={() => setShowLicense(true)} />
           <MailList threads={store.threads} onSelectFeed={onSelectFeed} />
         </div>
       )}

@@ -1,5 +1,5 @@
-import { setUser } from '@/lib/auth'
-
+// This content script is no longer needed as we removed the login system
+// Browser extension can access Gmail directly through cookies
 const matches = ['https://gmail-notifier.rxliuli.com/*']
 if (import.meta.env.DEV) {
   matches.push('http://localhost/*')
@@ -10,11 +10,5 @@ export default defineContentScript({
     const meta = document.createElement('meta')
     meta.name = 'gmail-notifier'
     document.head.appendChild(meta)
-
-    document.addEventListener('LoginSuccess', async (event) => {
-      const { user } = (event as CustomEvent).detail
-      console.log('LoginSuccess', user)
-      await setUser(user)
-    })
   },
 })
