@@ -1,7 +1,5 @@
 # Gmail Notifier
 
-![GitHub License](https://img.shields.io/github/license/rxliuli/gmail-notifier) ![GitHub stars](https://img.shields.io/github/stars/rxliuli/gmail-notifier) ![GitHub issues](https://img.shields.io/github/issues/rxliuli/gmail-notifier)
-
 A **100% open-source** Gmail notifier extension for your browser - including the server and website code.
 
 ## 📋 Features
@@ -50,7 +48,7 @@ We're currently in beta! To join:
 
 ### Prerequisites
 
-- Node.js 22+
+- Node.js 24+
 - pnpm
 - A Google Cloud Platform account (for Gmail API)
 
