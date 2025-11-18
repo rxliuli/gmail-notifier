@@ -263,7 +263,7 @@ function LicenseDialog({ onClose, onActivated }: { onClose: () => void; onActiva
         </div>
         <p className="text-xs text-muted-foreground mt-4">
           Don't have a license?{' '}
-          <a href="https://gmail-notifier.rxliuli.com/pricing" target="_blank" className="underline">
+          <a href="https://store.rxliuli.com/extensions/gmail-notifier/#pricing" target="_blank" className="underline">
             Purchase one here
           </a>
         </p>
