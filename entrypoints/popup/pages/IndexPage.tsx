@@ -183,7 +183,7 @@ function Toolbar({ onShowLicense }: { onShowLicense: () => void }) {
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem asChild>
-            <a href="https://discord.gg/5jkx5G6dUJ" target="_blank">
+            <a href="https://discord.gg/gFhKUthc88" target="_blank">
               <FaDiscord />
               Join our community
             </a>

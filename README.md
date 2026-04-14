@@ -40,7 +40,7 @@ A **100% open-source** Gmail notifier extension for your browser - including the
 
 We're currently in beta! To join:
 
-1. Join our [Discord server](https://discord.gg/5jkx5G6dUJ)
+1. Join our [Discord server](https://discord.gg/gFhKUthc88)
 2. Go to `#gmail-notifier` channel
 3. Send me a DM with your Gmail address to be added to the beta testers list
 
