@@ -12,7 +12,6 @@ import {
   MoreVerticalIcon,
   SquareArrowOutUpRightIcon,
   MailPlusIcon,
-  KeyIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { RefreshIcon } from '@/components/extra/RefreshIcon'
@@ -28,11 +27,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { FaDiscord, FaGithub } from 'react-icons/fa'
 import { EmailThread } from '@/lib/StateManager'
-import { getCurrentPlan, activate } from '@/lib/activation'
 import { useState } from 'react'
-import { Input } from '@/components/ui/input'
-import { get, set } from 'idb-keyval'
-import { useMount } from '@/lib/utils/useMount'
 import { useEffectOnce } from '@/lib/utils/useEffectOnce'
 
 function MailItem({ thread, onClick }: { thread: EmailThread; onClick: () => void }) {
@@ -103,7 +98,7 @@ function MailItem({ thread, onClick }: { thread: EmailThread; onClick: () => voi
   )
 }
 
-function Toolbar({ onShowLicense }: { onShowLicense: () => void }) {
+function Toolbar() {
   const store = useMailStore()
   const refreshMutation = useMutation({
     mutationFn: () => bgMessager.sendMessage('refreshThreads', undefined),
@@ -121,8 +116,6 @@ function Toolbar({ onShowLicense }: { onShowLicense: () => void }) {
       toast.error(msg + ' failed')
     }
   }
-
-  const plan = getCurrentPlan()
 
   return (
     <div className="flex items-center px-4 py-2 bg-card shadow-sm border-b border-border gap-2 sticky top-0 z-10">
@@ -171,10 +164,6 @@ function Toolbar({ onShowLicense }: { onShowLicense: () => void }) {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align={'end'}>
-          <DropdownMenuItem onClick={onShowLicense}>
-            <KeyIcon />
-            {plan.tier === 'free' ? 'Enter License' : `License: ${plan.tier}`}
-          </DropdownMenuItem>
           <DropdownMenuItem asChild>
             <a href={`chrome-extension://${browser.runtime.id}/popup.html`} target="_blank">
               <SquareArrowOutUpRightIcon />
@@ -210,72 +199,8 @@ function MailList({ threads, onSelectFeed }: { threads: EmailThread[]; onSelectF
   )
 }
 
-function LicenseDialog({ onClose, onActivated }: { onClose: () => void; onActivated: () => void }) {
-  const [code, setCode] = useState('')
-  const [loading, setLoading] = useState(false)
-
-  async function handleActivate() {
-    if (!code.trim()) {
-      toast.error('Please enter a license code')
-      return
-    }
-    setLoading(true)
-    try {
-      const result = await activate(code.trim())
-      if (result.success) {
-        toast.success('License activated successfully!')
-        onActivated()
-        onClose()
-      } else {
-        toast.error(result.message || 'Activation failed')
-      }
-    } catch (error) {
-      console.error('Activation error:', error)
-      toast.error('Activation failed. Please check your license code.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-card p-6 rounded-lg shadow-lg max-w-md w-full mx-4">
-        <h2 className="text-xl font-bold mb-4">Enter License Code</h2>
-        <p className="text-sm text-muted-foreground mb-4">
-          Gmail Notifier is free to evaluate. If you find it useful, please consider purchasing a license to support
-          development.
-        </p>
-        <Input
-          placeholder="Enter your license code"
-          value={code}
-          onChange={(e) => setCode(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleActivate()}
-          className="mb-4"
-          autoFocus
-        />
-        <div className="flex gap-2 justify-end">
-          <Button variant="outline" onClick={onClose} disabled={loading}>
-            Cancel
-          </Button>
-          <Button onClick={handleActivate} disabled={loading}>
-            {loading ? 'Activating...' : 'Activate'}
-          </Button>
-        </div>
-        <p className="text-xs text-muted-foreground mt-4">
-          Don't have a license?{' '}
-          <a href="https://store.rxliuli.com/extensions/gmail-notifier/#pricing" target="_blank" className="underline">
-            Purchase one here
-          </a>
-        </p>
-      </div>
-    </div>
-  )
-}
-
 function HomePage() {
   const store = useMailStore()
-  const [showLicense, setShowLicense] = useState(false)
-  const [, forceUpdate] = useState({})
 
   async function onSelectFeed(thread: EmailThread) {
     store.go(thread)
@@ -284,21 +209,6 @@ function HomePage() {
       url: thread.url,
     })
   }
-
-  // Check if we should show monthly reminder
-  useMount(async () => {
-    const plan = getCurrentPlan()
-    if (plan.tier === 'free') {
-      const lastReminder = await get<string>('lastLicenseReminder')
-      const now = Date.now()
-      const oneMonth = 30 * 24 * 60 * 60 * 1000
-
-      if (!lastReminder || now - new Date(lastReminder).getTime() > oneMonth) {
-        await set('lastLicenseReminder', new Date().toISOString())
-        setShowLicense(true)
-      }
-    }
-  })
 
   if (!store.email) {
     return (
@@ -312,10 +222,9 @@ function HomePage() {
 
   return (
     <>
-      {showLicense && <LicenseDialog onClose={() => setShowLicense(false)} onActivated={() => forceUpdate({})} />}
       {store.email && (
         <div>
-          <Toolbar onShowLicense={() => setShowLicense(true)} />
+          <Toolbar />
           <MailList threads={store.threads} onSelectFeed={onSelectFeed} />
         </div>
       )}

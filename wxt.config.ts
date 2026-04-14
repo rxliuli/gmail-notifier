@@ -19,7 +19,7 @@ export default defineConfig({
       name: 'Gmail Notifier',
       description: 'Gmail Notifier on Browser',
       permissions: ['storage', 'cookies', 'alarms', 'notifications', 'webRequest', 'idle', 'contextMenus'],
-      host_permissions: ['https://mail.google.com/**', 'https://store.rxliuli.com/**'],
+      host_permissions: ['https://mail.google.com/**'],
       author: {
         email: 'rxliuli@gmail.com',
       },
@@ -32,7 +32,7 @@ export default defineConfig({
           '128': 'icon/128.png',
         },
       },
-      homepage_url: 'https://store.rxliuli.com/extensions/gmail-notifier/',
+      homepage_url: 'https://github.com/rxliuli/gmail-notifier',
     }
     if (env.browser === 'chrome' || env.browser === 'edge') {
       manifest.permissions!.push('offscreen')
