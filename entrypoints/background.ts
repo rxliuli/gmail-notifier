@@ -35,6 +35,14 @@ async function sendNotification(stateManager: StateManager, feed: Feed) {
     return
   }
 
+  // Safari doesn't support the notifications API (same "unsupported manifest
+  // key" warning as idle) - skip instead of throwing and losing the rest of
+  // this function (badge/offscreen playback) along with it.
+  if (!browser.notifications) {
+    debugLog('sendNotification: browser.notifications unsupported, skipping')
+    return
+  }
+
   await browser.notifications.create(notificationId, {
     type: 'basic',
     iconUrl: '/icon/48.png' as PublicPath,
@@ -68,6 +76,20 @@ async function sendNotification(stateManager: StateManager, feed: Feed) {
 
 export default defineBackground(async () => {
   debugLog('background: starting up')
+  try {
+    await start()
+    debugLog('background: startup complete')
+  } catch (err) {
+    // A throw anywhere in start() aborts every registration after it -
+    // this is the only thing standing between that and total silence (the
+    // idle API being unsupported on Safari did exactly this: everything
+    // after browser.idle.onStateChanged.addListener() - the alarm, the
+    // startup fetch - just never ran, with no error visible anywhere).
+    debugLog('background: startup failed ->', err)
+  }
+})
+
+async function start() {
   const stateManager = new StateManager({
     checkLoginStatus,
     getRSS,
@@ -120,16 +142,25 @@ export default defineBackground(async () => {
       await stateManager.fetchThreads()
     }
   })
-  browser.idle.onStateChanged.addListener(async (state) => {
-    if (state === 'active') {
-      const alarms = await browser.alarms.get('fetchThreads')
-      if (!alarms) {
-        await browser.alarms.create('fetchThreads', { periodInMinutes: 0.5 })
+  // Safari doesn't support the idle API at all (confirmed by the "idle" key
+  // warning wxt/extport prints when converting the Safari build) - accessing
+  // browser.idle there throws synchronously and, since this whole callback
+  // is one async function, silently aborted every registration after it:
+  // no alarm, no startup fetch, nothing - with zero indication why.
+  if (browser.idle) {
+    browser.idle.onStateChanged.addListener(async (state) => {
+      if (state === 'active') {
+        const alarms = await browser.alarms.get('fetchThreads')
+        if (!alarms) {
+          await browser.alarms.create('fetchThreads', { periodInMinutes: 0.5 })
+        }
+      } else {
+        await browser.alarms.clear('fetchThreads')
       }
-    } else {
-      await browser.alarms.clear('fetchThreads')
-    }
-  })
+    })
+  } else {
+    debugLog('background: browser.idle unsupported, skipping idle-based alarm management')
+  }
   globalThis.addEventListener('online', async () => {
     const alarms = await browser.alarms.get('fetchThreads')
     if (!alarms) {
@@ -211,4 +242,4 @@ export default defineBackground(async () => {
   )
   debugLog('background: running startup fetchThreads')
   await stateManager.fetchThreads().catch((err) => debugLog('background: startup fetchThreads failed ->', err)) // fetch threads on startup
-})
+}
