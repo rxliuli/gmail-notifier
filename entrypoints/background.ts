@@ -39,7 +39,9 @@ async function sendNotification(stateManager: StateManager, feed: Feed) {
   // key" warning as idle) - skip instead of throwing and losing the rest of
   // this function (badge/offscreen playback) along with it.
   if (!browser.notifications) {
-    await debugLog('sendNotification: browser.notifications unsupported, skipping')
+    await debugLog(
+      'sendNotification: browser.notifications unsupported, skipping',
+    )
     return
   }
 
@@ -159,7 +161,9 @@ async function start() {
       }
     })
   } else {
-    await debugLog('background: browser.idle unsupported, skipping idle-based alarm management')
+    await debugLog(
+      'background: browser.idle unsupported, skipping idle-based alarm management',
+    )
   }
   globalThis.addEventListener('online', async () => {
     const alarms = await browser.alarms.get('fetchThreads')
@@ -172,8 +176,22 @@ async function start() {
   })
 
   // listen to webRequest
+  // Gmail's own tab, when open, hits /sync/* via long-polling multiple
+  // times a second - unthrottled, that fired fetchThreads() at the same
+  // rate. Each completion notifies listeners (badge, popup push), so with
+  // the popup open this was re-rendering it in a tight loop, felt as
+  // sluggish scrolling (worse on Safari's WKWebView popup than Chrome's).
+  // The 30s alarm above already guarantees a baseline poll; this listener
+  // only needs to react faster than that, not react to every single ping.
+  const WEBREQUEST_FETCH_COOLDOWN_MS = 10_000
+  let lastWebRequestFetchAt = 0
   browser.webRequest.onBeforeRequest.addListener(
     () => {
+      const now = Date.now()
+      if (now - lastWebRequestFetchAt < WEBREQUEST_FETCH_COOLDOWN_MS) {
+        return {}
+      }
+      lastWebRequestFetchAt = now
       setTimeout(() => stateManager.fetchThreads(), 1000)
       return {}
     },
@@ -219,20 +237,6 @@ async function start() {
 
   browser.runtime.onInstalled.addListener(async () => {
     registerActionMenus(menus)
-
-    // Diagnostic: the exact raw request, no wrapping, no parsing, fired from
-    // inside an event listener callback instead of defineBackground's own
-    // top-level execution - testing the hypothesis that async requests made
-    // directly in that top-level flow specifically are what fail on Safari.
-    try {
-      const diagResp = await fetch('https://mail.google.com/mail/u/0/feed/atom?t=' + Date.now(), {
-        credentials: 'include',
-      })
-      const diagText = await diagResp.text()
-      await debugLog('DIAG (onInstalled) raw fetch ->', diagResp.status, diagText.slice(0, 200))
-    } catch (err) {
-      await debugLog('DIAG (onInstalled) raw fetch threw ->', err)
-    }
   })
   browser.contextMenus.onClicked.addListener(async (info) => {
     if (info.menuItemId === 'open-gmail') {
@@ -252,14 +256,22 @@ async function start() {
   // the rest of startup with it.
   await debugLog('background: creating fetchThreads alarm')
   try {
-    const created = browser.alarms.create('fetchThreads', { periodInMinutes: 0.5 })
-    if (created && typeof (created as unknown as Promise<void>).then === 'function') {
+    const created = browser.alarms.create('fetchThreads', {
+      periodInMinutes: 0.5,
+    })
+    if (
+      created &&
+      typeof (created as unknown as Promise<void>).then === 'function'
+    ) {
       ;(created as unknown as Promise<void>).then(
         () => debugLog('background: fetchThreads alarm created'),
-        (err) => debugLog('background: fetchThreads alarm creation failed ->', err),
+        (err) =>
+          debugLog('background: fetchThreads alarm creation failed ->', err),
       )
     } else {
-      await debugLog('background: fetchThreads alarm create() returned a non-promise, assuming it succeeded')
+      await debugLog(
+        'background: fetchThreads alarm create() returned a non-promise, assuming it succeeded',
+      )
     }
   } catch (err) {
     await debugLog('background: fetchThreads alarm creation threw ->', err)
@@ -273,18 +285,29 @@ async function start() {
 // just 401'd here - looks like the cookie/ITP state isn't fully settled in
 // the first instant the service worker starts. Retry a few times instead of
 // giving up after one attempt right at cold start.
-async function fetchThreadsWithRetry(stateManager: StateManager, attempts = 3, delayMs = 1500) {
+async function fetchThreadsWithRetry(
+  stateManager: StateManager,
+  attempts = 3,
+  delayMs = 1500,
+) {
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
       await stateManager.fetchThreads()
-      await debugLog(`background: startup fetchThreads succeeded on attempt ${attempt}`)
+      await debugLog(
+        `background: startup fetchThreads succeeded on attempt ${attempt}`,
+      )
       return
     } catch (err) {
-      await debugLog(`background: startup fetchThreads attempt ${attempt}/${attempts} failed ->`, err)
+      await debugLog(
+        `background: startup fetchThreads attempt ${attempt}/${attempts} failed ->`,
+        err,
+      )
       if (attempt < attempts) {
         await new Promise((resolve) => setTimeout(resolve, delayMs))
       }
     }
   }
-  await debugLog(`background: startup fetchThreads gave up after ${attempts} attempts`)
+  await debugLog(
+    `background: startup fetchThreads gave up after ${attempts} attempts`,
+  )
 }
