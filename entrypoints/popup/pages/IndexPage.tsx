@@ -31,6 +31,7 @@ import {
 import { FaDiscord, FaGithub } from 'react-icons/fa'
 import type { EmailThread } from '@/lib/StateManager'
 import { useEffectOnce } from '@/lib/utils/useEffectOnce'
+import type { PublicPath } from 'wxt/browser'
 
 function MailItem({
   thread,
@@ -220,10 +221,12 @@ function Toolbar() {
         </DropdownMenuTrigger>
         <DropdownMenuContent align={'end'}>
           <DropdownMenuItem asChild>
-            <a
-              href={`chrome-extension://${browser.runtime.id}/popup.html`}
-              target="_blank"
-            >
+            {/* Not a hardcoded chrome-extension:// URL: Safari's own
+                extension resources live under safari-web-extension://, not
+                chrome-extension://, so that scheme opened a blank tab there
+                (the browser doesn't recognize it). getURL() returns
+                whatever scheme+id the current browser actually uses. */}
+            <a href={browser.runtime.getURL('/popup.html' as PublicPath)} target="_blank">
               <SquareArrowOutUpRightIcon />
               Popout
             </a>
