@@ -21,8 +21,8 @@ const RECONNECT_DELAY_MS = 2000
 
 function connectToServiceWorker() {
   const port = browser.runtime.connect({ name: 'popup' })
-  port.onDisconnect.addListener(() => {
-    debugLog('popup: service worker port disconnected, reconnecting in', RECONNECT_DELAY_MS, 'ms')
+  port.onDisconnect.addListener(async () => {
+    await debugLog('popup: service worker port disconnected, reconnecting in', RECONNECT_DELAY_MS, 'ms')
     setTimeout(() => {
       serviceWorkerConnection = connectToServiceWorker()
     }, RECONNECT_DELAY_MS)

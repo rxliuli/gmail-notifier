@@ -85,7 +85,7 @@ export async function getRSS(): Promise<RSSInfo> {
     throw err
   }
   const text = await resp.text()
-  debugLog('getRSS: response ->', {
+  await debugLog('getRSS: response ->', {
     status: resp.status,
     ok: resp.ok,
     contentType: resp.headers.get('content-type'),

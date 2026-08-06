@@ -39,7 +39,7 @@ async function sendNotification(stateManager: StateManager, feed: Feed) {
   // key" warning as idle) - skip instead of throwing and losing the rest of
   // this function (badge/offscreen playback) along with it.
   if (!browser.notifications) {
-    debugLog('sendNotification: browser.notifications unsupported, skipping')
+    await debugLog('sendNotification: browser.notifications unsupported, skipping')
     return
   }
 
@@ -75,17 +75,17 @@ async function sendNotification(stateManager: StateManager, feed: Feed) {
 }
 
 export default defineBackground(async () => {
-  debugLog('background: starting up')
+  await debugLog('background: starting up')
   try {
     await start()
-    debugLog('background: startup complete')
+    await debugLog('background: startup complete')
   } catch (err) {
     // A throw anywhere in start() aborts every registration after it -
     // this is the only thing standing between that and total silence (the
     // idle API being unsupported on Safari did exactly this: everything
     // after browser.idle.onStateChanged.addListener() - the alarm, the
     // startup fetch - just never ran, with no error visible anywhere).
-    debugLog('background: startup failed ->', err)
+    await debugLog('background: startup failed ->', err)
   }
 })
 
@@ -113,15 +113,15 @@ async function start() {
     await updateBadge(stateManager.getUnreadThreads().length)
   })
   // popup listener
-  browser.runtime.onConnect.addListener((port) => {
+  browser.runtime.onConnect.addListener(async (port) => {
     if (port.name === 'popup') {
-      debugLog('background: popup port connected')
+      await debugLog('background: popup port connected')
       async function f(): Promise<void> {
         await popupMessager.sendMessage('refreshPopup', undefined)
       }
       stateManager.on(f)
-      port.onDisconnect.addListener(function () {
-        debugLog('background: popup port disconnected')
+      port.onDisconnect.addListener(async function () {
+        await debugLog('background: popup port disconnected')
         stateManager.off(f)
         stateManager.clearViewed()
       })
@@ -159,7 +159,7 @@ async function start() {
       }
     })
   } else {
-    debugLog('background: browser.idle unsupported, skipping idle-based alarm management')
+    await debugLog('background: browser.idle unsupported, skipping idle-based alarm management')
   }
   globalThis.addEventListener('online', async () => {
     const alarms = await browser.alarms.get('fetchThreads')
@@ -236,7 +236,7 @@ async function start() {
   // below. Can't assume it returns a real Promise either - on Safari it
   // returned undefined, and chaining .then() on that threw and took down
   // the rest of startup with it.
-  debugLog('background: creating fetchThreads alarm')
+  await debugLog('background: creating fetchThreads alarm')
   try {
     const created = browser.alarms.create('fetchThreads', { periodInMinutes: 0.5 })
     if (created && typeof (created as unknown as Promise<void>).then === 'function') {
@@ -245,12 +245,12 @@ async function start() {
         (err) => debugLog('background: fetchThreads alarm creation failed ->', err),
       )
     } else {
-      debugLog('background: fetchThreads alarm create() returned a non-promise, assuming it succeeded')
+      await debugLog('background: fetchThreads alarm create() returned a non-promise, assuming it succeeded')
     }
   } catch (err) {
-    debugLog('background: fetchThreads alarm creation threw ->', err)
+    await debugLog('background: fetchThreads alarm creation threw ->', err)
   }
-  debugLog('background: running startup fetchThreads')
+  await debugLog('background: running startup fetchThreads')
   await fetchThreadsWithRetry(stateManager)
 }
 
@@ -263,13 +263,14 @@ async function fetchThreadsWithRetry(stateManager: StateManager, attempts = 3, d
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
       await stateManager.fetchThreads()
-      debugLog(`background: startup fetchThreads succeeded on attempt ${attempt}`)
+      await debugLog(`background: startup fetchThreads succeeded on attempt ${attempt}`)
       return
     } catch (err) {
-      debugLog(`background: startup fetchThreads attempt ${attempt}/${attempts} failed ->`, err)
+      await debugLog(`background: startup fetchThreads attempt ${attempt}/${attempts} failed ->`, err)
       if (attempt < attempts) {
         await new Promise((resolve) => setTimeout(resolve, delayMs))
       }
     }
   }
+  await debugLog(`background: startup fetchThreads gave up after ${attempts} attempts`)
 }

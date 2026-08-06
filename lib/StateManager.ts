@@ -62,18 +62,18 @@ export class StateManager {
 
   async fetchThreads(force = false) {
     if (!navigator.onLine) {
-      debugLog('fetchThreads: skipped, offline')
+      await debugLog('fetchThreads: skipped, offline')
       return
     }
     try {
       this.isLoggedIn = await this.api.checkLoginStatus()
-      debugLog('fetchThreads: checkLoginStatus ->', this.isLoggedIn)
+      await debugLog('fetchThreads: checkLoginStatus ->', this.isLoggedIn)
       if (!this.isLoggedIn) {
         this.notify()
         return
       }
       const rss = await this.api.getRSS()
-      debugLog('fetchThreads: getRSS ->', { email: rss.email, feedCount: rss.feeds.length })
+      await debugLog('fetchThreads: getRSS ->', { email: rss.email, feedCount: rss.feeds.length })
       this.email = rss.email
       this.threads = force
         ? []
@@ -97,10 +97,10 @@ export class StateManager {
       this.threads = uniqBy([...this.threads, ...newThreads], (it) => it.url).sort((a, b) =>
         b.modified.localeCompare(a.modified),
       )
-      debugLog('fetchThreads: done ->', this.threads.length, 'threads')
+      await debugLog('fetchThreads: done ->', this.threads.length, 'threads')
       this.notify()
     } catch (err) {
-      debugLog('fetchThreads: failed ->', err)
+      await debugLog('fetchThreads: failed ->', err)
       throw err
     }
   }
