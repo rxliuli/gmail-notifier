@@ -246,6 +246,10 @@ function HomePage() {
         <a href={'https://mail.google.com/mail/u/0/#inbox'} target="_blank">
           <Button>Please login to Gmail</Button>
         </a>
+        <Button variant="ghost" size="sm" onClick={() => store.goDebugLog()}>
+          <BugIcon />
+          Debug Log
+        </Button>
       </div>
     )
   }
