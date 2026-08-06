@@ -13,9 +13,6 @@ import {
   MoreVerticalIcon,
   SquareArrowOutUpRightIcon,
   MailPlusIcon,
-  SunIcon,
-  MoonIcon,
-  MonitorIcon,
   BugIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -28,16 +25,12 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { FaDiscord, FaGithub } from 'react-icons/fa'
 import type { EmailThread } from '@/lib/StateManager'
 import { useEffectOnce } from '@/lib/utils/useEffectOnce'
-import { useTheme } from '@/integrations/theme/ThemeProvider'
 
 function MailItem({
   thread,
@@ -143,7 +136,6 @@ function Toolbar() {
   const store = useMailStore()
   const mailQuery = useMailQuery()
   const queryClient = useQueryClient()
-  const { theme, setTheme } = useTheme()
   const refreshMutation = useMutation({
     // Don't rely solely on background's 'refreshPopup' push to update this
     // view - that only reaches us if our keepalive port happens to still be
@@ -236,22 +228,6 @@ function Toolbar() {
               Popout
             </a>
           </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuLabel>Theme</DropdownMenuLabel>
-          <DropdownMenuRadioGroup value={theme} onValueChange={setTheme}>
-            <DropdownMenuRadioItem value="light">
-              <SunIcon />
-              Light
-            </DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="dark">
-              <MoonIcon />
-              Dark
-            </DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="system">
-              <MonitorIcon />
-              System
-            </DropdownMenuRadioItem>
-          </DropdownMenuRadioGroup>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => store.goDebugLog()}>
             <BugIcon />

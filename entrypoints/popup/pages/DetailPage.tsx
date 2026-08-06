@@ -7,7 +7,6 @@ import { memo, useMemo, useRef } from 'react'
 import root from 'react-shadow'
 import { useCollapseStore } from '@/lib/collapseStore'
 import { createStyleSheets } from '@/lib/addStyle'
-import { useTheme } from '@/integrations/theme/ThemeProvider'
 
 // react-shadow's `root` is proxied via an index signature, which under
 // noUncheckedIndexedAccess types every property access as possibly
@@ -58,37 +57,39 @@ const BASE_RESET_STYLE = `
 // disappear entirely.
 const DARK_MODE_BRIGHTNESS = 1.5
 
+// Wrapped in the media query itself rather than picked in JS - the whole
+// point of moving off next-themes is that dark mode is now purely a system
+// preference the browser applies on its own, so this rule only needs to be
+// present in the stylesheet, never conditionally included.
 const DARK_MODE_FILTER_STYLE = `
-  :host {
-    filter: invert(1) hue-rotate(180deg) brightness(${DARK_MODE_BRIGHTNESS});
-    background: white;
-  }
-  img, video {
-    /* Order matters here, and it's the opposite of what's intuitive: the
-       brightness cancellation has to run BEFORE invert/hue-rotate, not
-       after. brightness() is a plain per-channel multiply (no pivot, unlike
-       contrast()), so multiplying by its exact reciprocal is a true inverse
-       - but only if it stays outside the two invert+hue-rotate pairs. Those
-       two pairs are each self-inverse and cancel to identity ONLY when they
-       sit immediately adjacent (host's invert/hue-rotate right after this
-       element's); sandwiching a brightness multiply between them (i.e.
-       after this element's invert/hue-rotate) breaks that adjacency and the
-       cancellation math no longer works out, leaving photos visibly
-       tinted. Putting it first keeps both pairs adjacent and cancels
-       exactly, so photos/logos render at their original brightness. */
-    filter: brightness(${1 / DARK_MODE_BRIGHTNESS}) invert(1) hue-rotate(180deg);
+  @media (prefers-color-scheme: dark) {
+    :host {
+      filter: invert(1) hue-rotate(180deg) brightness(${DARK_MODE_BRIGHTNESS});
+      background: white;
+    }
+    img, video {
+      /* Order matters here, and it's the opposite of what's intuitive: the
+         brightness cancellation has to run BEFORE invert/hue-rotate, not
+         after. brightness() is a plain per-channel multiply (no pivot,
+         unlike contrast()), so multiplying by its exact reciprocal is a
+         true inverse - but only if it stays outside the two invert/
+         hue-rotate pairs. Those two pairs are each self-inverse and cancel
+         to identity ONLY when they sit immediately adjacent (host's
+         invert/hue-rotate right after this element's); sandwiching a
+         brightness multiply between them (i.e. after this element's
+         invert/hue-rotate) breaks that adjacency and the cancellation math
+         no longer works out, leaving photos visibly tinted. Putting it
+         first keeps both pairs adjacent and cancels exactly, so photos/
+         logos render at their original brightness. */
+      filter: brightness(${1 / DARK_MODE_BRIGHTNESS}) invert(1) hue-rotate(180deg);
+    }
   }
 `
 
 const MailContent = memo((props: { contentHtml: string; styles: string[] }) => {
-  const { resolvedTheme } = useTheme()
   const styleSheets = useMemo(() => {
-    const styles =
-      resolvedTheme === 'dark'
-        ? [BASE_RESET_STYLE, ...props.styles, DARK_MODE_FILTER_STYLE]
-        : [BASE_RESET_STYLE, ...props.styles]
-    return createStyleSheets(styles)
-  }, [props.styles, resolvedTheme])
+    return createStyleSheets([BASE_RESET_STYLE, ...props.styles, DARK_MODE_FILTER_STYLE])
+  }, [props.styles])
   return (
     <ShadowDiv styleSheets={styleSheets}>
       <div dangerouslySetInnerHTML={{ __html: props.contentHtml }} style={{ overflowX: 'auto' }} />

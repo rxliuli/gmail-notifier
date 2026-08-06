@@ -1,13 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { useEffect } from 'react'
 import { render } from 'vitest-browser-react'
 import { DetailPage } from './DetailPage'
 import { useMailStore } from '@/lib/mailStore'
 import { useCollapseStore } from '@/lib/collapseStore'
 import type { EmailThread } from '@/lib/StateManager'
 import type { ThreadMail } from '@/lib/api/gmail'
-import { ThemeProvider, useTheme } from '@/integrations/theme/ThemeProvider'
-import { ShadowProvider } from '@/integrations/shadow/ShadowProvider'
 
 function makeThread(messageCount: number, overrides: Partial<EmailThread> = {}): EmailThread {
   const messages: ThreadMail['messages'] = Array.from({ length: messageCount }, (_, i) => ({
@@ -80,37 +77,31 @@ describe('DetailPage', () => {
   })
 
   describe('dark mode', () => {
-    function ForceTheme(props: { theme: string }) {
-      const { setTheme } = useTheme()
-      useEffect(() => setTheme(props.theme), [props.theme])
-      return null
-    }
-
+    // Dark mode is pure CSS now (@media (prefers-color-scheme: dark) in
+    // DARK_MODE_FILTER_STYLE) - no next-themes/JS state to force a theme
+    // with, so these check the generated CSS itself: that the invert filter
+    // is correctly scoped inside the media query (trusting the browser's
+    // own well-tested media query engine to gate it at render time), and
+    // that the always-on color reset is present regardless of theme.
     let screen: Awaited<ReturnType<typeof render>> | undefined
-
-    beforeEach(() => {
-      localStorage.clear()
-      document.body.classList.remove('light', 'dark')
-    })
 
     afterEach(async () => {
       await screen?.unmount()
       screen = undefined
     })
 
-    it('inverts the raw email HTML so it stays readable on a dark background', async () => {
+    it('scopes the invert filter to a prefers-color-scheme: dark media query', async () => {
       useMailStore.setState({ path: 'detail', thread: makeThread(1) })
-      screen = await render(
-        <ShadowProvider container={document.body}>
-          <ThemeProvider>
-            <ForceTheme theme="dark" />
-            <DetailPage />
-          </ThemeProvider>
-        </ShadowProvider>,
-      )
+      screen = await render(<DetailPage />)
       const host = [...screen.container.querySelectorAll('*')].find((el) => el.shadowRoot) as HTMLElement
-      await vi.waitUntil(() => getComputedStyle(host).filter !== 'none')
-      expect(getComputedStyle(host).filter).not.toBe('none')
+      await vi.waitUntil(() => host.shadowRoot!.adoptedStyleSheets.length > 0)
+      const mediaRules = [...host.shadowRoot!.adoptedStyleSheets]
+        .flatMap((sheet) => [...sheet.cssRules])
+        .filter((rule): rule is CSSMediaRule => rule instanceof CSSMediaRule)
+      expect(mediaRules).toHaveLength(1)
+      const mediaRule = mediaRules[0]!
+      expect(mediaRule.conditionText).toBe('(prefers-color-scheme: dark)')
+      expect(mediaRule.cssText).toContain('invert(1)')
     })
 
     it('does not leak the app dark-mode --foreground into unstyled email text', async () => {
@@ -120,39 +111,17 @@ describe('DetailPage', () => {
       // shadow boundaries, so with nothing resetting it, that text was
       // instead inheriting our OWN app chrome's `body { color:
       // var(--foreground) }` - near-white in dark mode (oklch(0.985 0 0),
-      // see style.css). The invert() filter above (built assuming content
-      // starts from real black-on-white) then flips that near-white to
-      // near-black, landing on the black :host background and vanishing
-      // entirely - confirmed live via DevTools on a real email before this
-      // was fixed with an explicit `:host { color: #000 }` reset.
+      // see style.css). The invert() filter (built assuming content starts
+      // from real black-on-white) then flips that near-white to near-black,
+      // landing on the black :host background and vanishing entirely -
+      // confirmed live via DevTools on a real email before this was fixed
+      // with an explicit, always-on `:host { color: #000 }` reset.
       useMailStore.setState({ path: 'detail', thread: makeThread(1) })
-      screen = await render(
-        <ShadowProvider container={document.body}>
-          <ThemeProvider>
-            <ForceTheme theme="dark" />
-            <DetailPage />
-          </ThemeProvider>
-        </ShadowProvider>,
-      )
+      screen = await render(<DetailPage />)
       const host = [...screen.container.querySelectorAll('*')].find((el) => el.shadowRoot) as HTMLElement
-      await vi.waitUntil(() => getComputedStyle(host).filter !== 'none')
+      await vi.waitUntil(() => host.shadowRoot!.querySelector('p') !== null)
       const unstyledText = host.shadowRoot!.querySelector('p')!
       expect(getComputedStyle(unstyledText).color).toBe('rgb(0, 0, 0)')
-    })
-
-    it('leaves the raw email HTML untouched in light mode', async () => {
-      useMailStore.setState({ path: 'detail', thread: makeThread(1) })
-      screen = await render(
-        <ShadowProvider container={document.body}>
-          <ThemeProvider>
-            <ForceTheme theme="light" />
-            <DetailPage />
-          </ThemeProvider>
-        </ShadowProvider>,
-      )
-      const host = [...screen.container.querySelectorAll('*')].find((el) => el.shadowRoot) as HTMLElement
-      await vi.waitUntil(() => document.body.classList.contains('light'))
-      expect(getComputedStyle(host).filter).toBe('none')
     })
   })
 })

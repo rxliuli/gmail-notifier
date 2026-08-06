@@ -3,6 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Without this, some WebView contexts (seen: Safari's extension
+         popup rendering light while the same page in a normal tab, same
+         build, same OS appearance, renders dark) don't reliably pick up
+         prefers-color-scheme; declaring both explicitly opts the page into
+         the OS-driven media query. -->
+    <meta name="color-scheme" content="light dark" />
     <title>Gmail Notifier</title>
   </head>
   <body>
