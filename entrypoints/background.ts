@@ -201,6 +201,14 @@ export default defineBackground(async () => {
     throw new Error('Unknown menu item id: ' + info.menuItemId)
   })
 
-  await browser.alarms.create('fetchThreads', { periodInMinutes: 0.5 })
+  // Fire-and-forget: don't let a slow/hanging alarms.create() (suspected on
+  // Safari - the debug log showed fetchThreads never running at all despite
+  // startup clearly reaching this point) block the actual mail fetch below.
+  debugLog('background: creating fetchThreads alarm')
+  browser.alarms.create('fetchThreads', { periodInMinutes: 0.5 }).then(
+    () => debugLog('background: fetchThreads alarm created'),
+    (err) => debugLog('background: fetchThreads alarm creation failed ->', err),
+  )
+  debugLog('background: running startup fetchThreads')
   await stateManager.fetchThreads().catch((err) => debugLog('background: startup fetchThreads failed ->', err)) // fetch threads on startup
 })
