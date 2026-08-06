@@ -1,5 +1,6 @@
 import { sortBy, uniqBy } from 'es-toolkit'
 import type { Feed, RSSInfo, ThreadMail } from './api/gmail'
+import { debugLog } from './debugLog'
 
 export interface EmailThread extends Feed, ThreadMail {}
 
@@ -61,39 +62,47 @@ export class StateManager {
 
   async fetchThreads(force = false) {
     if (!navigator.onLine) {
+      debugLog('fetchThreads: skipped, offline')
       return
     }
-    this.isLoggedIn = await this.api.checkLoginStatus()
-    if (!this.isLoggedIn) {
+    try {
+      this.isLoggedIn = await this.api.checkLoginStatus()
+      debugLog('fetchThreads: checkLoginStatus ->', this.isLoggedIn)
+      if (!this.isLoggedIn) {
+        this.notify()
+        return
+      }
+      const rss = await this.api.getRSS()
+      debugLog('fetchThreads: getRSS ->', { email: rss.email, feedCount: rss.feeds.length })
+      this.email = rss.email
+      this.threads = force
+        ? []
+        : this.threads.filter(
+            (t) =>
+              // Keep read emails
+              this.viewedEmails.has(t.url) ||
+              // Keep unchanged emails
+              rss.feeds.find((it) => it.url === t.url)?.modified === t.modified,
+          )
+      const newFeeds = rss.feeds.filter((it) => !this.threads.find((t) => t.url === it.url))
+      const newThreads = await Promise.all(
+        newFeeds.map(async (it) => {
+          const details = await this.api.getThreadMail(it.url)
+          return {
+            ...it,
+            ...details,
+          } satisfies EmailThread
+        }),
+      )
+      this.threads = uniqBy([...this.threads, ...newThreads], (it) => it.url).sort((a, b) =>
+        b.modified.localeCompare(a.modified),
+      )
+      debugLog('fetchThreads: done ->', this.threads.length, 'threads')
       this.notify()
-      return
+    } catch (err) {
+      debugLog('fetchThreads: failed ->', err)
+      throw err
     }
-    const rss = await this.api.getRSS()
-    this.email = rss.email
-    this.threads = force
-      ? []
-      : this.threads.filter(
-          (t) =>
-            // Keep read emails
-            this.viewedEmails.has(t.url) ||
-            // Keep unchanged emails
-            rss.feeds.find((it) => it.url === t.url)?.modified === t.modified,
-        )
-    const newFeeds = rss.feeds.filter((it) => !this.threads.find((t) => t.url === it.url))
-    const newThreads = await Promise.all(
-      newFeeds.map(async (it) => {
-        const details = await this.api.getThreadMail(it.url)
-        return {
-          ...it,
-          ...details,
-        } satisfies EmailThread
-      }),
-    )
-    this.threads = uniqBy([...this.threads, ...newThreads], (it) => it.url).sort((a, b) =>
-      b.modified.localeCompare(a.modified),
-    )
-    console.debug('fetchThreads', rss, this.threads)
-    this.notify()
   }
   async clearViewed() {
     this.threads = this.threads.filter((t) => !this.viewedEmails.has(t.url))

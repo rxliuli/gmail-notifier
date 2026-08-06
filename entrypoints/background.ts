@@ -15,6 +15,7 @@ import type { PublicPath } from 'wxt/browser'
 import { StateManager } from '@/lib/StateManager'
 import { registerActionMenus } from '@/lib/menu'
 import { menus } from '@/lib/constants'
+import { debugLog } from '@/lib/debugLog'
 
 // Update badge
 async function updateBadge(unreadCount: number) {
@@ -66,6 +67,7 @@ async function sendNotification(stateManager: StateManager, feed: Feed) {
 }
 
 export default defineBackground(async () => {
+  debugLog('background: starting up')
   const stateManager = new StateManager({
     checkLoginStatus,
     getRSS,
@@ -91,11 +93,13 @@ export default defineBackground(async () => {
   // popup listener
   browser.runtime.onConnect.addListener((port) => {
     if (port.name === 'popup') {
+      debugLog('background: popup port connected')
       async function f(): Promise<void> {
         await popupMessager.sendMessage('refreshPopup', undefined)
       }
       stateManager.on(f)
       port.onDisconnect.addListener(function () {
+        debugLog('background: popup port disconnected')
         stateManager.off(f)
         stateManager.clearViewed()
       })
@@ -198,5 +202,5 @@ export default defineBackground(async () => {
   })
 
   await browser.alarms.create('fetchThreads', { periodInMinutes: 0.5 })
-  await stateManager.fetchThreads() // fetch threads on startup
+  await stateManager.fetchThreads().catch((err) => debugLog('background: startup fetchThreads failed ->', err)) // fetch threads on startup
 })

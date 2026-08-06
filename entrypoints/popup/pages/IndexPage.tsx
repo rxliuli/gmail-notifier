@@ -15,11 +15,13 @@ import {
   SunIcon,
   MoonIcon,
   MonitorIcon,
+  BugIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { RefreshIcon } from '@/components/extra/RefreshIcon'
 import { useMailStore } from '@/lib/mailStore'
 import { DetailPage } from './DetailPage'
+import { DebugLogPage } from './DebugLogPage'
 import { toast } from 'sonner'
 import {
   DropdownMenu,
@@ -193,6 +195,15 @@ function Toolbar() {
               System
             </DropdownMenuRadioItem>
           </DropdownMenuRadioGroup>
+          {import.meta.env.DEV && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => store.goDebugLog()}>
+                <BugIcon />
+                Debug Log
+              </DropdownMenuItem>
+            </>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem asChild>
             <a href="https://discord.gg/gFhKUthc88" target="_blank">
@@ -235,10 +246,16 @@ function HomePage() {
 
   if (!store.email) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen">
+      <div className="flex flex-col items-center justify-center h-screen gap-2">
         <a href={'https://mail.google.com/mail/u/0/#inbox'} target="_blank">
           <Button>Please login to Gmail</Button>
         </a>
+        {import.meta.env.DEV && (
+          <Button variant="ghost" size="sm" onClick={() => store.goDebugLog()}>
+            <BugIcon />
+            Debug Log
+          </Button>
+        )}
       </div>
     )
   }
@@ -264,5 +281,11 @@ export function IndexPage() {
       popupMessager.removeAllListeners()
     }
   })
-  return store.path === 'detail' ? <DetailPage /> : <HomePage />
+  if (store.path === 'detail') {
+    return <DetailPage />
+  }
+  if (store.path === 'debug') {
+    return <DebugLogPage />
+  }
+  return <HomePage />
 }

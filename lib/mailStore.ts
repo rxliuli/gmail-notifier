@@ -2,11 +2,12 @@ import { create } from 'zustand'
 import type { EmailThread } from './StateManager'
 
 interface MailState {
-  path: 'list' | 'detail'
+  path: 'list' | 'detail' | 'debug'
   email: string | null
   threads: EmailThread[]
   thread: EmailThread | null
   go: (thread: EmailThread) => void
+  goDebugLog: () => void
   back: () => void
   refresh: () => Promise<void>
 }
@@ -22,6 +23,7 @@ export const useMailStore = create<MailState>((set, get) => ({
       thread,
     })
   },
+  goDebugLog: () => set({ path: 'debug' }),
   back: () => set({ path: 'list' }),
   refresh: async () => {
     const { email, threads } = await browser.storage.session.get<{
