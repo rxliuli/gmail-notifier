@@ -12,6 +12,9 @@ import {
   MoreVerticalIcon,
   SquareArrowOutUpRightIcon,
   MailPlusIcon,
+  SunIcon,
+  MoonIcon,
+  MonitorIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { RefreshIcon } from '@/components/extra/RefreshIcon'
@@ -22,6 +25,9 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
@@ -29,6 +35,7 @@ import { FaDiscord, FaGithub } from 'react-icons/fa'
 import { EmailThread } from '@/lib/StateManager'
 import { useState } from 'react'
 import { useEffectOnce } from '@/lib/utils/useEffectOnce'
+import { useTheme } from '@/integrations/theme/ThemeProvider'
 
 function MailItem({ thread, onClick }: { thread: EmailThread; onClick: () => void }) {
   const store = useMailStore()
@@ -100,6 +107,7 @@ function MailItem({ thread, onClick }: { thread: EmailThread; onClick: () => voi
 
 function Toolbar() {
   const store = useMailStore()
+  const { theme, setTheme } = useTheme()
   const refreshMutation = useMutation({
     mutationFn: () => bgMessager.sendMessage('refreshThreads', undefined),
   })
@@ -170,6 +178,22 @@ function Toolbar() {
               Popout
             </a>
           </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel>Theme</DropdownMenuLabel>
+          <DropdownMenuRadioGroup value={theme} onValueChange={setTheme}>
+            <DropdownMenuRadioItem value="light">
+              <SunIcon />
+              Light
+            </DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="dark">
+              <MoonIcon />
+              Dark
+            </DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="system">
+              <MonitorIcon />
+              System
+            </DropdownMenuRadioItem>
+          </DropdownMenuRadioGroup>
           <DropdownMenuSeparator />
           <DropdownMenuItem asChild>
             <a href="https://discord.gg/gFhKUthc88" target="_blank">

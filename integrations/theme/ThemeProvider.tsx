@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import {
   ThemeProvider as NextThemeProvider,
   useTheme as useNextTheme,
