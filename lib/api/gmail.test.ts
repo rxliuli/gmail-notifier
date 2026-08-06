@@ -1,5 +1,15 @@
 import { describe, it, expect } from 'vitest'
-import { extractThreadMail, extractRSS, Feed, formatDate, getOpenWebLink } from './gmail'
+import {
+  extractThreadMail,
+  extractRSS,
+  Feed,
+  formatDate,
+  getOpenWebLink,
+  parseAddressField,
+  extractGmailInfo,
+  parseReplyTo,
+  ThreadMail,
+} from './gmail'
 import { parseDocument, parseFeed } from 'htmlparser2'
 import { selectOne } from 'css-select'
 
@@ -78,6 +88,13 @@ describe('extractContent', () => {
     expect(mail.subject).eq('Test HTML')
     expect(mail.messages[0].contentHtml).includes('<i>Hello</i>').includes('<b>World</b>')
   })
+  it('extracts <style> tags from the document', async () => {
+    const content = (await import('./assets/content-html.html?raw')).default
+    const mail = extractThreadMail(content)
+    expect(mail.styles).length(2)
+    expect(mail.styles[0]).includes('font-family: arial, sans-serif')
+    expect(mail.styles[1]).includes('.logo')
+  })
   it('image', async () => {
     const content = (await import('./assets/content-image.html?raw')).default
     const main = extractThreadMail(content, 'https://mail.google.com/mail/u/0')
@@ -108,5 +125,82 @@ describe('getOpenWebLink', () => {
         'https://mail.google.com/mail/u/0?account_id=rxliuli@gmail.com&message_id=19734500f9fb78da&view=conv&extsrc=atom',
       ),
     ).eq('https://mail.google.com/mail/u/0/#inbox/19734500f9fb78da')
+  })
+})
+
+describe('parseAddressField', () => {
+  it('parses a single "name" <email> pair', () => {
+    expect(parseAddressField('&quot;Liuli RX&quot;&lt;rxliuli@gmail.com&gt;')).toEqual([
+      'Liuli RX <rxliuli@gmail.com>',
+    ])
+  })
+  it('parses multiple comma-separated addresses', () => {
+    expect(
+      parseAddressField('&quot;A&quot;&lt;a@x.com&gt;, &quot;B&quot;&lt;b@y.com&gt;'),
+    ).toEqual(['A <a@x.com>', 'B <b@y.com>'])
+  })
+  it('parses a bare address with no display name', () => {
+    expect(parseAddressField('&lt;a@x.com&gt;')).toEqual(['a@x.com'])
+  })
+  it('collapses a display name that is just the email address', () => {
+    expect(parseAddressField('&quot;a@x.com&quot;&lt;a@x.com&gt;')).toEqual(['a@x.com'])
+  })
+  it('falls back to a bare regex match when there are no angle brackets', () => {
+    expect(parseAddressField('a@x.com')).toEqual(['a@x.com'])
+  })
+  it('returns an empty array for empty input', () => {
+    expect(parseAddressField('')).toEqual([])
+  })
+})
+
+describe('extractGmailInfo', () => {
+  it('parses the u/<n> form with a message_id', () => {
+    expect(
+      extractGmailInfo(
+        'https://mail.google.com/mail/u/0?account_id=rxliuli@gmail.com&message_id=19734500f9fb78da&view=conv',
+      ),
+    ).toEqual({ n: '0', thread: '19734500f9fb78da' })
+  })
+  it('parses the compatible u=<n> form', () => {
+    expect(extractGmailInfo('https://mail.google.com/mail/u=1/?message_id=abc123')).toEqual({
+      n: '1',
+      thread: 'abc123',
+    })
+  })
+  it('returns null when there is no message_id', () => {
+    expect(extractGmailInfo('https://mail.google.com/mail/u/0?view=conv')).toBeNull()
+  })
+})
+
+describe('parseReplyTo', () => {
+  const thread: ThreadMail = {
+    subject: 'Test',
+    messageCount: 2,
+    styles: [],
+    messages: [
+      {
+        senderName: 'Me',
+        senderEmail: 'me@gmail.com',
+        time: '2025-06-03T05:42:00.000Z',
+        to: ['them@example.com'],
+        cc: [],
+        contentHtml: '',
+      },
+      {
+        senderName: 'Them',
+        senderEmail: 'them@example.com',
+        time: '2025-06-03T06:00:00.000Z',
+        to: ['me@gmail.com'],
+        cc: [],
+        contentHtml: '',
+      },
+    ],
+  }
+  it('returns the other participant when the thread has one', () => {
+    expect(parseReplyTo(thread, 'me@gmail.com')).toEqual({ email: 'them@example.com', name: 'Them' })
+  })
+  it('returns undefined when every message is from "me"', () => {
+    const selfOnly: ThreadMail = { ...thread, messages: [thread.messages[0]] }
+    expect(parseReplyTo(selfOnly, 'me@gmail.com')).toBeUndefined()
   })
 })

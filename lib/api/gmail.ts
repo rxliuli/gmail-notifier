@@ -109,6 +109,8 @@ export interface ThreadMail {
   subject: string
   messageCount: number
   messages: Message[]
+  // CSS extracted from <style> tags in the fetched document, applied to each message's shadow root
+  styles: string[]
 }
 
 // Tue, Jun 3, 2025 at 10:12 AM => 2025-06-03T10:12:00.000Z
@@ -120,8 +122,10 @@ export function formatDate(date: string): string {
 export function parseAddressField(html: string): string[] {
   const result: string[] = []
   const decoded = decodeHTML(html)
-  // Match all "name" <email> or email only
-  const regex = /"?(.*?)"?\s*<([^>]+)>/g
+  // Match all "name" <email> or email only. The leading `,?\s*` and excluding
+  // `,`/`"` from the name keeps the ", " separator before the next recipient
+  // from being swallowed into that recipient's name.
+  const regex = /,?\s*"?([^",<]*?)"?\s*<([^>]+)>/g
   let match
   while ((match = regex.exec(decoded))) {
     if (match[1]) {
@@ -162,7 +166,12 @@ export function extractThreadMail(text: string, baseUrl?: string): ThreadMail {
   const messageCountMatch = messageCountText.match(/(\d+) messages?/)
   const messageCount = messageCountMatch ? parseInt(messageCountMatch[1], 10) : 0
 
-  // 3. Each email
+  // 3. CSS extracted from any <style> tags present in the document
+  const styles = querySelectorAll('style', doc)
+    .map((style) => getTextContent(style)?.trim() || '')
+    .filter(Boolean)
+
+  // 4. Each email
   const messageTables = querySelectorAll('table.message', doc)
   const messages: Message[] = []
   messageTables.forEach((table) => {
@@ -242,6 +251,7 @@ export function extractThreadMail(text: string, baseUrl?: string): ThreadMail {
     subject,
     messageCount,
     messages,
+    styles,
   }
 }
 

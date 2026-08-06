@@ -1,0 +1,78 @@
+import { describe, it, expect, beforeEach } from 'vitest'
+import { render } from 'vitest-browser-react'
+import { DetailPage } from './DetailPage'
+import { useMailStore } from '@/lib/mailStore'
+import { useCollapseStore } from '@/lib/collapseStore'
+import { EmailThread } from '@/lib/StateManager'
+import { ThreadMail } from '@/lib/api/gmail'
+
+function makeThread(messageCount: number, overrides: Partial<EmailThread> = {}): EmailThread {
+  const messages: ThreadMail['messages'] = Array.from({ length: messageCount }, (_, i) => ({
+    senderName: `Sender ${i}`,
+    senderEmail: `sender${i}@example.com`,
+    time: '2025-06-03T05:42:00.000Z',
+    to: ['rxliuli@gmail.com'],
+    cc: [],
+    contentHtml: `<p>Body ${i}</p>`,
+    contentText: `Body ${i}`,
+  }))
+  return {
+    title: 'Test',
+    summary: 'summary',
+    url: 'https://mail.google.com/mail/u/0/?account_id=test@test.com&message_id=abc123&view=conv&extsrc=atom',
+    modified: '2025-06-03T05:42:00.000Z',
+    author: { name: 'Test', email: 'test@test.com' },
+    subject: 'Test Subject',
+    messageCount,
+    messages,
+    styles: [],
+    ...overrides,
+  }
+}
+
+// Every message must end up either directly rendered or accounted for by a
+// "N messages collapsed" indicator - none may silently disappear.
+function renderedMessageSlots(container: HTMLElement) {
+  const messageBlocks = container.querySelectorAll('[data-testid="mail-message"]').length
+  const indicator = container.querySelector('[data-testid="collapsed-indicator"]')
+  const indicatorCount = indicator ? Number(indicator.getAttribute('data-count')) : 0
+  return messageBlocks + indicatorCount
+}
+
+describe('DetailPage', () => {
+  beforeEach(() => {
+    useCollapseStore.setState({ contentIndexes: new Set(), groupIndexes: new Set(), count: 0 })
+    useMailStore.setState({ path: 'list', thread: null })
+  })
+
+  it('hides the collapse-all toggle for a single-message thread', async () => {
+    useMailStore.setState({ path: 'detail', thread: makeThread(1) })
+    const screen = render(<DetailPage />)
+    await expect.element(screen.getByTitle('Open in Gmail').first()).toBeInTheDocument()
+    expect(screen.getByTitle('All Collapsed').query()).toBeNull()
+    expect(screen.getByTitle('All Expanded').query()).toBeNull()
+  })
+
+  it('shows the collapse-all toggle for a multi-message thread', async () => {
+    useMailStore.setState({ path: 'detail', thread: makeThread(3) })
+    const screen = render(<DetailPage />)
+    const toggle = screen.getByTitle('All Collapsed').query() ?? screen.getByTitle('All Expanded').query()
+    expect(toggle).not.toBeNull()
+  })
+
+  it.each([2, 3, 4, 5, 6, 7, 8])('accounts for every message with no message count (count=%i)', async (count) => {
+    useMailStore.setState({ path: 'detail', thread: makeThread(count) })
+    const screen = render(<DetailPage />)
+    expect(renderedMessageSlots(screen.container)).toBe(count)
+  })
+
+  it('expanding the collapsed group reveals the hidden messages (count=5)', async () => {
+    useMailStore.setState({ path: 'detail', thread: makeThread(5) })
+    const screen = render(<DetailPage />)
+    const indicator = screen.getByTestId('collapsed-indicator')
+    await expect.element(indicator).toBeInTheDocument()
+    await indicator.click()
+    expect(screen.getByTestId('collapsed-indicator').query()).toBeNull()
+    expect(screen.container.querySelectorAll('[data-testid="mail-message"]').length).toBe(5)
+  })
+})

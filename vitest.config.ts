@@ -1,6 +1,10 @@
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 
+// Pin the timezone so date-parsing tests (formatDate, extractThreadMail) are
+// deterministic regardless of the host machine's/CI runner's local timezone.
+process.env.TZ = 'Asia/Singapore'
+
 export default defineConfig({
   plugins: [react()],
   test: {
@@ -15,5 +19,8 @@ export default defineConfig({
     alias: {
       '@': __dirname,
     },
+  },
+  optimizeDeps: {
+    include: ['@webext-core/fake-browser', 'next-themes'],
   },
 })
