@@ -102,16 +102,31 @@ async function start() {
     await updateBadge(stateManager.getUnreadThreads().length)
   })
   // popup listener
+  let popupListenerRegistered = false
+  async function pushRefreshToPopup(): Promise<void> {
+    await popupMessager.sendMessage('refreshPopup', undefined)
+  }
   browser.runtime.onConnect.addListener(async (port) => {
     if (port.name === 'popup') {
       await debugLog('background: popup port connected')
-      async function f(): Promise<void> {
-        await popupMessager.sendMessage('refreshPopup', undefined)
+      // Guard against double-registration: this port disconnects and
+      // reconnects often on Safari (seen throughout this file's debugLog
+      // history). Registering a fresh closure unconditionally on every
+      // connect meant that if a new connect fired before the previous
+      // disconnect's cleanup below had run, two listeners briefly coexisted
+      // - every notify() then pushed 'refreshPopup' twice in a row, visible
+      // as the mail list flickering/re-rendering right when the popup
+      // opens. Reusing one stable function reference plus this guard keeps
+      // at most one registered at a time regardless of connect/disconnect
+      // ordering.
+      if (!popupListenerRegistered) {
+        stateManager.on(pushRefreshToPopup)
+        popupListenerRegistered = true
       }
-      stateManager.on(f)
       port.onDisconnect.addListener(async function () {
         await debugLog('background: popup port disconnected')
-        stateManager.off(f)
+        stateManager.off(pushRefreshToPopup)
+        popupListenerRegistered = false
         stateManager.clearViewed()
       })
     }
