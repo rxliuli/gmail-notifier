@@ -195,15 +195,11 @@ function Toolbar() {
               System
             </DropdownMenuRadioItem>
           </DropdownMenuRadioGroup>
-          {import.meta.env.DEV && (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => store.goDebugLog()}>
-                <BugIcon />
-                Debug Log
-              </DropdownMenuItem>
-            </>
-          )}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => store.goDebugLog()}>
+            <BugIcon />
+            Debug Log
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem asChild>
             <a href="https://discord.gg/gFhKUthc88" target="_blank">
@@ -250,12 +246,6 @@ function HomePage() {
         <a href={'https://mail.google.com/mail/u/0/#inbox'} target="_blank">
           <Button>Please login to Gmail</Button>
         </a>
-        {import.meta.env.DEV && (
-          <Button variant="ghost" size="sm" onClick={() => store.goDebugLog()}>
-            <BugIcon />
-            Debug Log
-          </Button>
-        )}
       </div>
     )
   }
