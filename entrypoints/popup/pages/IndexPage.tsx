@@ -289,15 +289,26 @@ export function IndexPage() {
   return (
     <div className="flex flex-col min-h-screen">
       <Toolbar />
-      <div className="flex-1 overflow-y-auto">
+      <div
+        className={cn(
+          'flex-1 overflow-y-auto',
+          // Centering a child via h-full/100% here doesn't actually work -
+          // confirmed live in DevTools that h-full resolved to 36px (its own
+          // content height) instead of this element's real, DevTools-
+          // confirmed 331px. A flex item's flex-grow-resolved size isn't
+          // reliably treated as a definite height for a descendant's
+          // percentage height to resolve against. Centering directly on
+          // this element instead - which does have a real resolved height -
+          // sidesteps that entirely, no percentage resolution involved.
+          !mailQuery.data?.email && 'flex flex-col items-center justify-center',
+        )}
+      >
         {mailQuery.data?.email ? (
           <MailList threads={mailQuery.data.threads} onSelectFeed={onSelectFeed} />
         ) : (
-          <div className="flex flex-col items-center justify-center gap-2 py-16">
-            <a href={'https://mail.google.com/mail/u/0/#inbox'} target="_blank">
-              <Button>Please login to Gmail</Button>
-            </a>
-          </div>
+          <a href={'https://mail.google.com/mail/u/0/#inbox'} target="_blank">
+            <Button>Please login to Gmail</Button>
+          </a>
         )}
       </div>
     </div>
