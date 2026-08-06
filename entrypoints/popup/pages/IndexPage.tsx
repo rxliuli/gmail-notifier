@@ -270,7 +270,12 @@ export function IndexPage() {
   const store = useMailStore()
   useEffectOnce(() => {
     popupMessager.onMessage('refreshPopup', () => store.refresh())
+    // Show whatever background last fetched immediately, then kick off a
+    // fresh fetch - background's own alarm/webRequest triggers only run on
+    // their own schedule, so without this the popup can sit on stale data
+    // until one of those happens to fire.
     store.refresh()
+    bgMessager.sendMessage('refreshThreads', undefined)
     return () => {
       popupMessager.removeAllListeners()
     }
