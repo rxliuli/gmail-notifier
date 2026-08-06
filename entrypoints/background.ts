@@ -232,14 +232,24 @@ async function start() {
     throw new Error('Unknown menu item id: ' + info.menuItemId)
   })
 
-  // Fire-and-forget: don't let a slow/hanging alarms.create() (suspected on
-  // Safari - the debug log showed fetchThreads never running at all despite
-  // startup clearly reaching this point) block the actual mail fetch below.
+  // Fire-and-forget: don't let alarms.create() block the actual mail fetch
+  // below. Can't assume it returns a real Promise either - on Safari it
+  // returned undefined, and chaining .then() on that threw and took down
+  // the rest of startup with it.
   debugLog('background: creating fetchThreads alarm')
-  browser.alarms.create('fetchThreads', { periodInMinutes: 0.5 }).then(
-    () => debugLog('background: fetchThreads alarm created'),
-    (err) => debugLog('background: fetchThreads alarm creation failed ->', err),
-  )
+  try {
+    const created = browser.alarms.create('fetchThreads', { periodInMinutes: 0.5 })
+    if (created && typeof (created as unknown as Promise<void>).then === 'function') {
+      ;(created as unknown as Promise<void>).then(
+        () => debugLog('background: fetchThreads alarm created'),
+        (err) => debugLog('background: fetchThreads alarm creation failed ->', err),
+      )
+    } else {
+      debugLog('background: fetchThreads alarm create() returned a non-promise, assuming it succeeded')
+    }
+  } catch (err) {
+    debugLog('background: fetchThreads alarm creation threw ->', err)
+  }
   debugLog('background: running startup fetchThreads')
   await stateManager.fetchThreads().catch((err) => debugLog('background: startup fetchThreads failed ->', err)) // fetch threads on startup
 }
