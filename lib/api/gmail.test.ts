@@ -1,9 +1,10 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
   extractThreadMail,
   extractRSS,
   formatDate,
   getOpenWebLink,
+  getGmailAt,
   parseAddressField,
   extractGmailInfo,
   parseReplyTo,
@@ -202,5 +203,42 @@ describe('parseReplyTo', () => {
   it('returns undefined when every message is from "me"', () => {
     const selfOnly: ThreadMail = { ...thread, messages: [thread.messages[0]!] }
     expect(parseReplyTo(selfOnly, 'me@gmail.com')).toBeUndefined()
+  })
+})
+
+describe('getGmailAt', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('returns the cookie value when the default store lookup finds it (Chrome/Firefox)', async () => {
+    const get = vi.fn().mockResolvedValue({ value: 'at-token' })
+    const getAllCookieStores = vi.fn()
+    vi.stubGlobal('browser', { cookies: { get, getAllCookieStores } })
+
+    expect(await getGmailAt('0')).eq('at-token')
+    expect(getAllCookieStores).not.toBeCalled()
+  })
+
+  it('falls back to searching every cookie store when the default lookup is empty (Safari)', async () => {
+    const get = vi
+      .fn()
+      .mockResolvedValueOnce(undefined) // default (no storeId) lookup
+      .mockResolvedValueOnce(undefined) // first store
+      .mockResolvedValueOnce({ value: 'at-token' }) // second store
+    const getAllCookieStores = vi.fn().mockResolvedValue([{ id: 'store-1' }, { id: 'store-2' }])
+    vi.stubGlobal('browser', { cookies: { get, getAllCookieStores } })
+
+    expect(await getGmailAt('0')).eq('at-token')
+    expect(get).toHaveBeenNthCalledWith(2, expect.objectContaining({ storeId: 'store-1' }))
+    expect(get).toHaveBeenNthCalledWith(3, expect.objectContaining({ storeId: 'store-2' }))
+  })
+
+  it('returns undefined when the cookie exists in no store', async () => {
+    const get = vi.fn().mockResolvedValue(undefined)
+    const getAllCookieStores = vi.fn().mockResolvedValue([{ id: 'store-1' }])
+    vi.stubGlobal('browser', { cookies: { get, getAllCookieStores } })
+
+    expect(await getGmailAt('0')).toBeUndefined()
   })
 })

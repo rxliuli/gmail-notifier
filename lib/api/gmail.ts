@@ -265,12 +265,27 @@ export async function getThreadMail(url: string) {
   return extractThreadMail(text, baseUrl)
 }
 
+// Safari doesn't search across cookie stores by default the way Chrome/Firefox
+// do - a plain cookies.get() silently misses the cookie unless storeId is
+// given explicitly, so fall back to checking every store when the direct
+// lookup comes up empty.
+async function getCookie(name: string, url: string): Promise<string | undefined> {
+  const cookie = await browser.cookies.get({ url, name })
+  if (cookie) {
+    return cookie.value
+  }
+  const stores = await browser.cookies.getAllCookieStores()
+  for (const store of stores) {
+    const storeCookie = await browser.cookies.get({ url, name, storeId: store.id })
+    if (storeCookie) {
+      return storeCookie.value
+    }
+  }
+  return undefined
+}
+
 export async function getGmailAt(n: string) {
-  const cookie = await browser.cookies.get({
-    url: `https://mail.google.com/mail/u/${n}`,
-    name: 'GMAIL_AT',
-  })
-  return cookie?.value
+  return getCookie('GMAIL_AT', `https://mail.google.com/mail/u/${n}`)
 }
 
 // Check login status
