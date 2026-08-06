@@ -1,10 +1,13 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { useEffect } from 'react'
 import { render } from 'vitest-browser-react'
 import { DetailPage } from './DetailPage'
 import { useMailStore } from '@/lib/mailStore'
 import { useCollapseStore } from '@/lib/collapseStore'
 import { EmailThread } from '@/lib/StateManager'
 import { ThreadMail } from '@/lib/api/gmail'
+import { ThemeProvider, useTheme } from '@/integrations/theme/ThemeProvider'
+import { ShadowProvider } from '@/integrations/shadow/ShadowProvider'
 
 function makeThread(messageCount: number, overrides: Partial<EmailThread> = {}): EmailThread {
   const messages: ThreadMail['messages'] = Array.from({ length: messageCount }, (_, i) => ({
@@ -74,5 +77,55 @@ describe('DetailPage', () => {
     await indicator.click()
     expect(screen.getByTestId('collapsed-indicator').query()).toBeNull()
     expect(screen.container.querySelectorAll('[data-testid="mail-message"]').length).toBe(5)
+  })
+
+  describe('dark mode', () => {
+    function ForceTheme(props: { theme: string }) {
+      const { setTheme } = useTheme()
+      useEffect(() => setTheme(props.theme), [props.theme])
+      return null
+    }
+
+    let screen: ReturnType<typeof render> | undefined
+
+    beforeEach(() => {
+      localStorage.clear()
+      document.body.classList.remove('light', 'dark')
+    })
+
+    afterEach(() => {
+      screen?.unmount()
+      screen = undefined
+    })
+
+    it('inverts the raw email HTML so it stays readable on a dark background', async () => {
+      useMailStore.setState({ path: 'detail', thread: makeThread(1) })
+      screen = render(
+        <ShadowProvider container={document.body}>
+          <ThemeProvider>
+            <ForceTheme theme="dark" />
+            <DetailPage />
+          </ThemeProvider>
+        </ShadowProvider>,
+      )
+      const host = [...screen.container.querySelectorAll('*')].find((el) => el.shadowRoot) as HTMLElement
+      await vi.waitUntil(() => getComputedStyle(host).filter !== 'none')
+      expect(getComputedStyle(host).filter).not.toBe('none')
+    })
+
+    it('leaves the raw email HTML untouched in light mode', async () => {
+      useMailStore.setState({ path: 'detail', thread: makeThread(1) })
+      screen = render(
+        <ShadowProvider container={document.body}>
+          <ThemeProvider>
+            <ForceTheme theme="light" />
+            <DetailPage />
+          </ThemeProvider>
+        </ShadowProvider>,
+      )
+      const host = [...screen.container.querySelectorAll('*')].find((el) => el.shadowRoot) as HTMLElement
+      await vi.waitUntil(() => document.body.classList.contains('light'))
+      expect(getComputedStyle(host).filter).toBe('none')
+    })
   })
 })

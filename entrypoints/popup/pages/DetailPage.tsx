@@ -7,9 +7,29 @@ import { memo, useMemo, useRef } from 'react'
 import root from 'react-shadow'
 import { useCollapseStore } from '@/lib/collapseStore'
 import { createStyleSheets } from '@/lib/addStyle'
+import { useTheme } from '@/integrations/theme/ThemeProvider'
+
+// Emails ship their own (usually light, white-background) styling, which we
+// don't control. Inverting lightness while rotating hue back is the standard
+// trick browsers' own "force dark" modes use to make arbitrary HTML readable
+// on a dark background; re-inverting img/video cancels it out so photos and
+// logos aren't rendered as photonegatives.
+const DARK_MODE_FILTER_STYLE = `
+  :host {
+    filter: invert(1) hue-rotate(180deg);
+    background: white;
+  }
+  img, video {
+    filter: invert(1) hue-rotate(180deg);
+  }
+`
 
 const MailContent = memo((props: { contentHtml: string; styles: string[] }) => {
-  const styleSheets = useMemo(() => createStyleSheets(props.styles), [props.styles])
+  const { resolvedTheme } = useTheme()
+  const styleSheets = useMemo(() => {
+    const styles = resolvedTheme === 'dark' ? [...props.styles, DARK_MODE_FILTER_STYLE] : props.styles
+    return createStyleSheets(styles)
+  }, [props.styles, resolvedTheme])
   return (
     <root.div styleSheets={styleSheets}>
       <div dangerouslySetInnerHTML={{ __html: props.contentHtml }} style={{ overflowX: 'auto' }} />
