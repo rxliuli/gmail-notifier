@@ -22,6 +22,6 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    include: ['@webext-core/fake-browser', 'next-themes'],
+    include: ['@webext-core/fake-browser'],
   },
 })

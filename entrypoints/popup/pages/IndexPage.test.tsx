@@ -12,8 +12,6 @@ vi.stubGlobal('chrome', fakeBrowser)
 const { IndexPage } = await import('./IndexPage')
 const { useMailStore } = await import('@/lib/mailStore')
 const { bgMessager } = await import('@/lib/messager')
-const { ThemeProvider } = await import('@/integrations/theme/ThemeProvider')
-const { ShadowProvider } = await import('@/integrations/shadow/ShadowProvider')
 
 function makeThread(url: string) {
   return {
@@ -49,11 +47,7 @@ describe('IndexPage', () => {
     const queryClient = new QueryClient()
     const screen = await render(
       <QueryClientProvider client={queryClient}>
-        <ShadowProvider container={document.body}>
-          <ThemeProvider>
-            <IndexPage />
-          </ThemeProvider>
-        </ShadowProvider>
+        <IndexPage />
       </QueryClientProvider>,
     )
     // Mount's useMailQuery should pick up the pre-seeded thread from storage
