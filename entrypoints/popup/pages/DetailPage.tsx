@@ -19,12 +19,24 @@ const ShadowDiv = root.div as NonNullable<typeof root.div>
 // trick browsers' own "force dark" modes use to make arbitrary HTML readable
 // on a dark background; re-inverting img/video cancels it out so photos and
 // logos aren't rendered as photonegatives.
+//
+// The extra contrast() matters for emails that use low-contrast text to
+// begin with (light gray "secondary info" on white, common for fine print /
+// error details) - invert() alone preserves the original color distance, so
+// text that was barely legible on white becomes barely legible on black
+// instead of actually improving. Pushing mid-tones further toward black/white
+// widens that gap instead of just relocating it.
 const DARK_MODE_FILTER_STYLE = `
   :host {
-    filter: invert(1) hue-rotate(180deg);
+    filter: invert(1) hue-rotate(180deg) contrast(1.3);
     background: white;
   }
   img, video {
+    /* No contrast() here: unlike invert()/hue-rotate(), contrast() isn't its
+       own inverse, so repeating it would compound instead of cancel out.
+       The host's contrast(1.3) still applies once, as the outermost pass
+       over everything beneath it - a mild, acceptable tradeoff versus
+       doubling it. */
     filter: invert(1) hue-rotate(180deg);
   }
 `
