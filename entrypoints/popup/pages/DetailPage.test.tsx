@@ -113,6 +113,33 @@ describe('DetailPage', () => {
       expect(getComputedStyle(host).filter).not.toBe('none')
     })
 
+    it('does not leak the app dark-mode --foreground into unstyled email text', async () => {
+      // Regression test for a real bug: raw email HTML (e.g. makeThread's
+      // default `<p>Body</p>`) usually sets no color of its own, expecting
+      // the browser's plain black default. `color` is inherited and crosses
+      // shadow boundaries, so with nothing resetting it, that text was
+      // instead inheriting our OWN app chrome's `body { color:
+      // var(--foreground) }` - near-white in dark mode (oklch(0.985 0 0),
+      // see style.css). The invert() filter above (built assuming content
+      // starts from real black-on-white) then flips that near-white to
+      // near-black, landing on the black :host background and vanishing
+      // entirely - confirmed live via DevTools on a real email before this
+      // was fixed with an explicit `:host { color: #000 }` reset.
+      useMailStore.setState({ path: 'detail', thread: makeThread(1) })
+      screen = await render(
+        <ShadowProvider container={document.body}>
+          <ThemeProvider>
+            <ForceTheme theme="dark" />
+            <DetailPage />
+          </ThemeProvider>
+        </ShadowProvider>,
+      )
+      const host = [...screen.container.querySelectorAll('*')].find((el) => el.shadowRoot) as HTMLElement
+      await vi.waitUntil(() => getComputedStyle(host).filter !== 'none')
+      const unstyledText = host.shadowRoot!.querySelector('p')!
+      expect(getComputedStyle(unstyledText).color).toBe('rgb(0, 0, 0)')
+    })
+
     it('leaves the raw email HTML untouched in light mode', async () => {
       useMailStore.setState({ path: 'detail', thread: makeThread(1) })
       screen = await render(

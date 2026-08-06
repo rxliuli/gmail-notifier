@@ -14,6 +14,28 @@ import { useTheme } from '@/integrations/theme/ThemeProvider'
 // undefined even though the proxy always returns a component.
 const ShadowDiv = root.div as NonNullable<typeof root.div>
 
+// Raw email HTML almost never sets its own text color (it relies on the
+// browser default, black) - but `color` is an inherited property that
+// crosses shadow boundaries by default, so with nothing resetting it here,
+// unstyled email text was inheriting straight through from our OWN app
+// chrome's `body { color: var(--foreground) }`. In dark mode --foreground is
+// near-white (correct for our UI, meant to sit on our dark background) -
+// confirmed live via DevTools computed styles showing an unstyled <pre> at
+// oklch(0.985 0 0). Piping that near-white value through the invert() below
+// (built for content starting from the browser's actual black default) flips
+// it to near-black-on-black, and the text disappears entirely regardless of
+// how the invert/brightness math is tuned. Pinning an explicit black here -
+// not `initial`/`canvastext`, which the ancestor's `color-scheme: dark` can
+// silently reinterpret as white - cuts that inheritance off at the shadow
+// boundary so unstyled text always starts from the same baseline a normal
+// browser gives it. Anything the email DOES style explicitly (inline color,
+// its own <style> rules) still overrides this via normal cascade specificity.
+const BASE_RESET_STYLE = `
+  :host {
+    color: #000;
+  }
+`
+
 // Emails ship their own (usually light, white-background) styling, which we
 // don't control. Inverting lightness while rotating hue back is the standard
 // trick browsers' own "force dark" modes use to make arbitrary HTML readable
@@ -61,7 +83,10 @@ const DARK_MODE_FILTER_STYLE = `
 const MailContent = memo((props: { contentHtml: string; styles: string[] }) => {
   const { resolvedTheme } = useTheme()
   const styleSheets = useMemo(() => {
-    const styles = resolvedTheme === 'dark' ? [...props.styles, DARK_MODE_FILTER_STYLE] : props.styles
+    const styles =
+      resolvedTheme === 'dark'
+        ? [BASE_RESET_STYLE, ...props.styles, DARK_MODE_FILTER_STYLE]
+        : [BASE_RESET_STYLE, ...props.styles]
     return createStyleSheets(styles)
   }, [props.styles, resolvedTheme])
   return (
