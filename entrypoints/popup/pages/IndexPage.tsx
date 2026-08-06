@@ -38,9 +38,18 @@ import type { EmailThread } from '@/lib/StateManager'
 import { useEffectOnce } from '@/lib/utils/useEffectOnce'
 import { useTheme } from '@/integrations/theme/ThemeProvider'
 
-function MailItem({ thread, onClick }: { thread: EmailThread; onClick: () => void }) {
+function MailItem({
+  thread,
+  onClick,
+}: {
+  thread: EmailThread
+  onClick: () => void
+}) {
   const store = useMailStore()
-  async function gmailAction(cmd: Exclude<GmailAction['cmd'], 'markAllAsRead'>, msg: string) {
+  async function gmailAction(
+    cmd: Exclude<GmailAction['cmd'], 'markAllAsRead'>,
+    msg: string,
+  ) {
     await bgMessager.sendMessage('gmailAction', {
       cmd,
       url: thread.url,
@@ -69,11 +78,24 @@ function MailItem({ thread, onClick }: { thread: EmailThread; onClick: () => voi
           <span className="text-xs text-gray-400 whitespace-nowrap group-hover:hidden block">
             {dayjs(thread.modified).format('YYYY-MM-DD HH:mm')}
           </span>
-          <div className="flex gap-1 group-hover:flex hidden" onClick={(ev) => ev.stopPropagation()}>
-            <Button size="icon" variant="ghost" title={'Archive'} onClick={() => gmailAction('archive', 'Archive')}>
+          <div
+            className="flex gap-1 group-hover:flex hidden"
+            onClick={(ev) => ev.stopPropagation()}
+          >
+            <Button
+              size="icon"
+              variant="ghost"
+              title={'Archive'}
+              onClick={() => gmailAction('archive', 'Archive')}
+            >
               <ArchiveIcon />
             </Button>
-            <Button size="icon" variant="ghost" title={'Trash'} onClick={() => gmailAction('deleteMail', 'Delete')}>
+            <Button
+              size="icon"
+              variant="ghost"
+              title={'Trash'}
+              onClick={() => gmailAction('deleteMail', 'Delete')}
+            >
               <Trash2Icon />
             </Button>
             <Button
@@ -92,7 +114,12 @@ function MailItem({ thread, onClick }: { thread: EmailThread; onClick: () => voi
             >
               <BanIcon />
             </Button>
-            <Button size="icon" variant="ghost" title={'Open in Gmail'} onClick={() => openMailInWeb(thread.url)}>
+            <Button
+              size="icon"
+              variant="ghost"
+              title={'Open in Gmail'}
+              onClick={() => openMailInWeb(thread.url)}
+            >
               <ExternalLinkIcon />
             </Button>
           </div>
@@ -110,7 +137,16 @@ function Toolbar() {
   const store = useMailStore()
   const { theme, setTheme } = useTheme()
   const refreshMutation = useMutation({
-    mutationFn: () => bgMessager.sendMessage('refreshThreads', undefined),
+    // Don't rely solely on background's 'refreshPopup' push to update this
+    // view - that only reaches us if our keepalive port happens to still be
+    // connected the instant background finishes (it disconnects/reconnects
+    // often on Safari), so a message landing mid-gap is silently lost and
+    // the button does nothing until the popup is closed and reopened. Pull
+    // directly once our own request is known to have completed instead.
+    mutationFn: async () => {
+      await bgMessager.sendMessage('refreshThreads', undefined)
+      await store.refresh()
+    },
   })
 
   async function markAllAsRead(msg: string) {
@@ -119,6 +155,7 @@ function Toolbar() {
         cmd: 'markAllAsRead',
         urls: store.threads.map((t) => t.url),
       })
+      await store.refresh()
       toast.success(msg)
     } catch (err) {
       console.error(err)
@@ -149,7 +186,11 @@ function Toolbar() {
         size="icon"
         variant="ghost"
         title={'Refresh'}
-        className={cn('h-8 w-8', refreshMutation.isPending && 'animate-spin pointer-events-none opacity-50')}
+        className={cn(
+          'h-8 w-8',
+          refreshMutation.isPending &&
+            'animate-spin pointer-events-none opacity-50',
+        )}
         onClick={() => refreshMutation.mutate()}
         disabled={refreshMutation.isPending}
       >
@@ -163,7 +204,12 @@ function Toolbar() {
       >
         <ExternalLinkIcon />
       </Button>
-      <Button size="icon" variant="ghost" title={'New email'} onClick={newEmail}>
+      <Button
+        size="icon"
+        variant="ghost"
+        title={'New email'}
+        onClick={newEmail}
+      >
         <MailPlusIcon />
       </Button>
       <DropdownMenu>
@@ -174,7 +220,10 @@ function Toolbar() {
         </DropdownMenuTrigger>
         <DropdownMenuContent align={'end'}>
           <DropdownMenuItem asChild>
-            <a href={`chrome-extension://${browser.runtime.id}/popup.html`} target="_blank">
+            <a
+              href={`chrome-extension://${browser.runtime.id}/popup.html`}
+              target="_blank"
+            >
               <SquareArrowOutUpRightIcon />
               Popout
             </a>
@@ -219,11 +268,21 @@ function Toolbar() {
   )
 }
 
-function MailList({ threads, onSelectFeed }: { threads: EmailThread[]; onSelectFeed: (thread: EmailThread) => void }) {
+function MailList({
+  threads,
+  onSelectFeed,
+}: {
+  threads: EmailThread[]
+  onSelectFeed: (thread: EmailThread) => void
+}) {
   return (
     <div className="w-full">
       {threads.map((thread) => (
-        <MailItem key={thread.url} thread={thread} onClick={() => onSelectFeed(thread)} />
+        <MailItem
+          key={thread.url}
+          thread={thread}
+          onClick={() => onSelectFeed(thread)}
+        />
       ))}
     </div>
   )
@@ -234,10 +293,12 @@ function HomePage() {
 
   async function onSelectFeed(thread: EmailThread) {
     store.go(thread)
-    await bgMessager.sendMessage('gmailAction', {
-      cmd: 'viewed',
-      url: thread.url,
-    })
+    if (import.meta.env.PROD) {
+      await bgMessager.sendMessage('gmailAction', {
+        cmd: 'viewed',
+        url: thread.url,
+      })
+    }
   }
 
   if (!store.email) {
