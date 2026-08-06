@@ -228,44 +228,39 @@ export function DetailPage() {
   const groupStartIndex = collapseStore.groupIndexes.size > 0 ? Math.min(...collapseStore.groupIndexes) : null
 
   return (
-    // No inner overflow-y-auto/min-h-screen wrapper: let the popup's own
-    // document scroll instead of a nested scroll container. Safari extension
-    // popups run in a WKWebView whose scroll physics for arbitrary nested
-    // overflow elements has known bugs (WebKit's own 26.2 changelog notes
-    // fixing extension popups flickering/misbehaving during scroll) -
-    // scrolling the document directly gets the same native elastic/momentum
-    // behavior a normal Safari page gets, which nested divs don't reliably.
-    <div>
+    <div className="flex flex-col min-h-screen">
       <DetailToolbar
         messageCount={messageCount}
         allCollapsed={collapseStore.hasCollapsed}
         onToggleAll={collapseStore.toggleAll}
       />
-      <div className="w-full">
-        {thread.messages.map((message, i) => {
-          if (collapseStore.groupIndexes.has(i)) {
-            if (i === groupStartIndex) {
-              return (
-                <CollapsedMessagesIndicator
-                  key={`collapsed-indicator`}
-                  count={collapseStore.groupIndexes.size}
-                  startIndex={groupStartIndex!}
-                  onExpand={() => collapseStore.expandGroup()}
-                />
-              )
+      <div className="flex-1 overflow-y-auto">
+        <div className="w-full">
+          {thread.messages.map((message, i) => {
+            if (collapseStore.groupIndexes.has(i)) {
+              if (i === groupStartIndex) {
+                return (
+                  <CollapsedMessagesIndicator
+                    key={`collapsed-indicator`}
+                    count={collapseStore.groupIndexes.size}
+                    startIndex={groupStartIndex!}
+                    onExpand={() => collapseStore.expandGroup()}
+                  />
+                )
+              }
+              return null
             }
-            return null
-          }
-          return (
-            <MailMessage
-              key={`${message.senderEmail}-${message.time}-${i}`}
-              message={message}
-              styles={thread.styles}
-              collapsed={collapseStore.contentIndexes.has(i)}
-              onToggle={() => collapseStore.toggleContent(i)}
-            />
-          )
-        })}
+            return (
+              <MailMessage
+                key={`${message.senderEmail}-${message.time}-${i}`}
+                message={message}
+                styles={thread.styles}
+                collapsed={collapseStore.contentIndexes.has(i)}
+                onToggle={() => collapseStore.toggleContent(i)}
+              />
+            )
+          })}
+        </div>
       </div>
     </div>
   )

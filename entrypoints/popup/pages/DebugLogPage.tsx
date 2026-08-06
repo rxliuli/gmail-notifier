@@ -28,10 +28,7 @@ export function DebugLogPage() {
   }
 
   return (
-    // No inner overflow-auto/min-h-screen wrapper - see DetailPage for why:
-    // scrolling the popup's own document instead of a nested container
-    // sidesteps a known Safari extension-popup scroll bug.
-    <div>
+    <div className="flex flex-col min-h-screen">
       <div className="flex items-center px-4 py-2 bg-background shadow-sm border-b border-border gap-2 sticky top-0 z-10">
         <Button size="icon" variant="ghost" className="h-8 w-8" onClick={store.back}>
           <ArrowLeftIcon className="w-4 h-4" />
@@ -47,7 +44,7 @@ export function DebugLogPage() {
           <Trash2Icon />
         </Button>
       </div>
-      <pre className="p-4 text-xs whitespace-pre-wrap break-all">
+      <pre className="flex-1 overflow-auto p-4 text-xs whitespace-pre-wrap break-all">
         {logs.length > 0 ? logs.join('\n') : 'No log entries yet.'}
       </pre>
     </div>
