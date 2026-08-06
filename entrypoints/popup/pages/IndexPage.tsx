@@ -33,7 +33,6 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { FaDiscord, FaGithub } from 'react-icons/fa'
 import type { EmailThread } from '@/lib/StateManager'
-import { useState } from 'react'
 import { useEffectOnce } from '@/lib/utils/useEffectOnce'
 import { useTheme } from '@/integrations/theme/ThemeProvider'
 

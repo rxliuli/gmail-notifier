@@ -78,7 +78,7 @@ export function extractRSS(text: string): RSSInfo {
 export async function getRSS(): Promise<RSSInfo> {
   let resp: Response
   try {
-    resp = await fetch('https://mail.google.com/mail/u/0/feed/atom?t=' + Date.now())
+    resp = await fetch('https://mail.google.com/mail/u/0/feed/atom?t=' + Date.now(), { credentials: 'include' })
   } catch (err) {
     console.error('getRSS failed', err)
     throw err
@@ -260,7 +260,7 @@ export async function getThreadMail(url: string) {
   const u = new URL(url)
   const baseUrl = u.origin + u.pathname
   const messageId = u.searchParams.get('message_id')
-  const resp = await fetch(`${baseUrl}/?ui=2&view=pt&search=all&th=${messageId}`)
+  const resp = await fetch(`${baseUrl}/?ui=2&view=pt&search=all&th=${messageId}`, { credentials: 'include' })
   const text = await resp.text()
   return extractThreadMail(text, baseUrl)
 }
