@@ -13,6 +13,7 @@ import {
   setAttribute,
 } from '../domutils'
 import { decodeHTML } from 'entities'
+import { debugLog } from '../debugLog'
 
 dayjs.extend(customParseFormat)
 
@@ -84,6 +85,14 @@ export async function getRSS(): Promise<RSSInfo> {
     throw err
   }
   const text = await resp.text()
+  debugLog('getRSS: response ->', {
+    status: resp.status,
+    ok: resp.ok,
+    contentType: resp.headers.get('content-type'),
+    redirected: resp.redirected,
+    url: resp.url,
+    bodyPreview: text.slice(0, 300),
+  })
   return extractRSS(text)
 }
 
