@@ -251,5 +251,25 @@ async function start() {
     debugLog('background: fetchThreads alarm creation threw ->', err)
   }
   debugLog('background: running startup fetchThreads')
-  await stateManager.fetchThreads().catch((err) => debugLog('background: startup fetchThreads failed ->', err)) // fetch threads on startup
+  await fetchThreadsWithRetry(stateManager)
+}
+
+// Confirmed on Safari: a manual fetch(..., {credentials:'include'}) run from
+// the console a moment later succeeds fine with the exact same code that
+// just 401'd here - looks like the cookie/ITP state isn't fully settled in
+// the first instant the service worker starts. Retry a few times instead of
+// giving up after one attempt right at cold start.
+async function fetchThreadsWithRetry(stateManager: StateManager, attempts = 3, delayMs = 1500) {
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      await stateManager.fetchThreads()
+      debugLog(`background: startup fetchThreads succeeded on attempt ${attempt}`)
+      return
+    } catch (err) {
+      debugLog(`background: startup fetchThreads attempt ${attempt}/${attempts} failed ->`, err)
+      if (attempt < attempts) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs))
+      }
+    }
+  }
 }
