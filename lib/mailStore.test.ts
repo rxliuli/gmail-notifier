@@ -25,15 +25,15 @@ describe('mailStore', () => {
     expect(useMailStore.getState().path).toBe('list')
   })
 
-  it('refresh() hydrates email and threads from session storage', async () => {
+  it('refresh() hydrates email and threads from local storage', async () => {
     const threads = [{ url: 'https://mail.google.com/1' }] as any
-    await fakeBrowser.storage.session.set({ email: 'me@example.com', threads })
+    await fakeBrowser.storage.local.set({ email: 'me@example.com', threads })
     await useMailStore.getState().refresh()
     expect(useMailStore.getState().email).toBe('me@example.com')
     expect(useMailStore.getState().threads).toEqual(threads)
   })
 
-  it('refresh() reflects an empty session (logged out / no threads)', async () => {
+  it('refresh() reflects empty storage (logged out / no threads)', async () => {
     useMailStore.setState({ email: 'stale@example.com', threads: [{ url: 'stale' }] as any })
     await useMailStore.getState().refresh()
     expect(useMailStore.getState().email).toBeUndefined()

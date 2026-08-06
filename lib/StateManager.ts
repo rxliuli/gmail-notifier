@@ -38,7 +38,13 @@ export class StateManager {
 
   private async notify() {
     if ('browser' in globalThis || 'chrome' in globalThis) {
-      await browser.storage.session.set({
+      // storage.local, not storage.session: session storage only reached
+      // Safari in 16.4 and has been reported flaky there since (Apple dev
+      // forum threads on storage.session/storage.local both returning
+      // stale/undefined data). local is universally reliable across every
+      // target browser, and persisting across restarts is fine here - the
+      // popup would rather show last-known state than nothing.
+      await browser.storage.local.set({
         isLoggedIn: this.isLoggedIn,
         email: this.email,
         threads: this.threads,
@@ -69,7 +75,7 @@ export class StateManager {
       this.isLoggedIn = await this.api.checkLoginStatus()
       await debugLog('fetchThreads: checkLoginStatus ->', this.isLoggedIn)
       if (!this.isLoggedIn) {
-        this.notify()
+        await this.notify()
         return
       }
       const rss = await this.api.getRSS()
@@ -98,7 +104,13 @@ export class StateManager {
         b.modified.localeCompare(a.modified),
       )
       await debugLog('fetchThreads: done ->', this.threads.length, 'threads')
-      this.notify()
+      // Not fire-and-forget: this used to be an unawaited call, which meant
+      // a rejection here (e.g. the storage write failing) became a silent
+      // unhandled rejection - fetchThreads would still log "done" and
+      // return successfully while the popup-facing state never actually
+      // got written. Exactly the shape of bug this whole file's debugLog
+      // calls exist to catch, missed on this one call site.
+      await this.notify()
     } catch (err) {
       await debugLog('fetchThreads: failed ->', err)
       throw err

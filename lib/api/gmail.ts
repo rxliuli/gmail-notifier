@@ -324,7 +324,7 @@ export async function getIk(n: string): Promise<string | null> {
     return ikCache.get(n)!
   }
   const page =
-    (await browser.storage.session.get<Record<string, string>>('page-' + n))['page-' + n] ||
+    (await browser.storage.local.get<Record<string, string>>('page-' + n))['page-' + n] ||
     `https://mail.google.com/mail/u/${n}/s/`
   async function next(href: string): Promise<string | null> {
     const r = await fetch(href, { credentials: 'include' })
@@ -341,7 +341,7 @@ export async function getIk(n: string): Promise<string | null> {
         const url = getAttribute(meta, 'content')?.split('url=')[1]
         if (url) {
           const o = new URL(url, page)
-          await browser.storage.session.set({ ['page-' + n]: o.href })
+          await browser.storage.local.set({ ['page-' + n]: o.href })
           return next(o.href)
         }
       }

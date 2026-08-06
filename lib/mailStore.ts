@@ -26,7 +26,7 @@ export const useMailStore = create<MailState>((set, get) => ({
   goDebugLog: () => set({ path: 'debug' }),
   back: () => set({ path: 'list' }),
   refresh: async () => {
-    const { email, threads } = await browser.storage.session.get<{
+    const { email, threads } = await browser.storage.local.get<{
       email: string
       threads: EmailThread[]
     }>(['email', 'threads'])
