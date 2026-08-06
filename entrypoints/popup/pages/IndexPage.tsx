@@ -1,7 +1,8 @@
 import { Button } from '@/components/ui/button'
 import { openMailInWeb, newEmail } from '@/lib/api/gmail'
 import { bgMessager, popupMessager, type GmailAction } from '@/lib/messager'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { mailQueryKey, useMailQuery } from '@/lib/useMailQuery'
 import dayjs from 'dayjs'
 import {
   BanIcon,
@@ -45,7 +46,7 @@ function MailItem({
   thread: EmailThread
   onClick: () => void
 }) {
-  const store = useMailStore()
+  const queryClient = useQueryClient()
   async function gmailAction(
     cmd: Exclude<GmailAction['cmd'], 'markAllAsRead'>,
     msg: string,
@@ -55,7 +56,7 @@ function MailItem({
         cmd,
         url: thread.url,
       })
-      await store.refresh()
+      await queryClient.invalidateQueries({ queryKey: mailQueryKey })
       toast.success(msg)
     } catch (err) {
       console.error(err)
@@ -140,6 +141,8 @@ function MailItem({
 
 function Toolbar() {
   const store = useMailStore()
+  const mailQuery = useMailQuery()
+  const queryClient = useQueryClient()
   const { theme, setTheme } = useTheme()
   const refreshMutation = useMutation({
     // Don't rely solely on background's 'refreshPopup' push to update this
@@ -150,7 +153,7 @@ function Toolbar() {
     // directly once our own request is known to have completed instead.
     mutationFn: async () => {
       await bgMessager.sendMessage('refreshThreads', undefined)
-      await store.refresh()
+      await queryClient.invalidateQueries({ queryKey: mailQueryKey })
     },
   })
 
@@ -158,9 +161,9 @@ function Toolbar() {
     try {
       await bgMessager.sendMessage('gmailAction', {
         cmd: 'markAllAsRead',
-        urls: store.threads.map((t) => t.url),
+        urls: (mailQuery.data?.threads ?? []).map((t) => t.url),
       })
-      await store.refresh()
+      await queryClient.invalidateQueries({ queryKey: mailQueryKey })
       toast.success(msg)
     } catch (err) {
       console.error(err)
@@ -175,9 +178,9 @@ function Toolbar() {
         <img src="/icon/48.png" alt="Gmail Notifier" className="w-6 h-6" />
       </div>
       <span className="font-medium text-foreground flex-1">
-        {store.email} ({store.threads.length})
+        {mailQuery.data?.email} ({mailQuery.data?.threads.length ?? 0})
       </span>
-      {store.threads.length > 0 && (
+      {(mailQuery.data?.threads.length ?? 0) > 0 && (
         <Button
           size="icon"
           variant="ghost"
@@ -295,6 +298,7 @@ function MailList({
 
 function HomePage() {
   const store = useMailStore()
+  const mailQuery = useMailQuery()
 
   async function onSelectFeed(thread: EmailThread) {
     store.go(thread)
@@ -306,7 +310,7 @@ function HomePage() {
     }
   }
 
-  if (!store.email) {
+  if (!mailQuery.data?.email) {
     return (
       <div className="flex flex-col items-center justify-center h-screen gap-2">
         <a href={'https://mail.google.com/mail/u/0/#inbox'} target="_blank">
@@ -321,26 +325,27 @@ function HomePage() {
   }
 
   return (
-    <>
-      {store.email && (
-        <div>
-          <Toolbar />
-          <MailList threads={store.threads} onSelectFeed={onSelectFeed} />
-        </div>
-      )}
-    </>
+    <div>
+      <Toolbar />
+      <MailList threads={mailQuery.data.threads} onSelectFeed={onSelectFeed} />
+    </div>
   )
 }
 
 export function IndexPage() {
   const store = useMailStore()
+  const queryClient = useQueryClient()
   useEffectOnce(() => {
-    popupMessager.onMessage('refreshPopup', () => store.refresh())
-    // Show whatever background last fetched immediately, then kick off a
-    // fresh fetch - background's own alarm/webRequest triggers only run on
-    // their own schedule, so without this the popup can sit on stale data
-    // until one of those happens to fire.
-    store.refresh()
+    // useMailQuery already reads whatever background last wrote as soon as
+    // this mounts - no separate "show cached snapshot" pull needed here
+    // anymore. This only needs to (a) invalidate the query when background
+    // pushes 'refreshPopup', so any mounted useMailQuery re-reads storage,
+    // and (b) kick off an actual fresh remote fetch, since background's own
+    // alarm/webRequest triggers only run on their own schedule and without
+    // this the popup can sit on stale data until one of those fires.
+    popupMessager.onMessage('refreshPopup', () => {
+      queryClient.invalidateQueries({ queryKey: mailQueryKey })
+    })
     bgMessager.sendMessage('refreshThreads', undefined)
     return () => {
       popupMessager.removeAllListeners()

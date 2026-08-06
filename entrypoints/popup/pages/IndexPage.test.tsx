@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render } from 'vitest-browser-react'
 import { fakeBrowser } from '@webext-core/fake-browser'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { mailQueryKey } from '@/lib/useMailQuery'
 
 vi.stubGlobal('browser', fakeBrowser)
 // @webext-core/messaging's onMessage() checks for a `chrome` global directly
@@ -28,7 +29,7 @@ describe('IndexPage', () => {
   beforeEach(async () => {
     fakeBrowser.reset()
     await browser.storage.local.set({ email: 'me@example.com', threads: [makeThread('a')] })
-    useMailStore.setState({ path: 'list', email: null, threads: [], thread: null })
+    useMailStore.setState({ path: 'list', thread: null })
   })
 
   it('refresh button pulls fresh state directly instead of depending solely on the background push', async () => {
@@ -39,14 +40,15 @@ describe('IndexPage', () => {
     // lost, so the button visibly did nothing until the popup was closed
     // and reopened. This mock simulates exactly that: background finishes
     // the fetch and writes fresh state to storage, but never emits any
-    // popupMessager message - the click handler must pull the fresh state
-    // itself to pass.
+    // popupMessager message - the click handler must invalidate/pull the
+    // fresh state itself to pass.
     vi.spyOn(bgMessager, 'sendMessage').mockImplementation(async () => {
       await browser.storage.local.set({ email: 'me@example.com', threads: [makeThread('b')] })
     })
 
+    const queryClient = new QueryClient()
     const screen = await render(
-      <QueryClientProvider client={new QueryClient()}>
+      <QueryClientProvider client={queryClient}>
         <ShadowProvider container={document.body}>
           <ThemeProvider>
             <IndexPage />
@@ -54,12 +56,12 @@ describe('IndexPage', () => {
         </ShadowProvider>
       </QueryClientProvider>,
     )
-    // Mount's own store.refresh() should pick up the pre-seeded thread from
-    // storage before any fetch runs.
-    await vi.waitUntil(() => useMailStore.getState().threads[0]?.url === 'a')
+    // Mount's useMailQuery should pick up the pre-seeded thread from storage
+    // before any fetch runs.
+    await vi.waitUntil(() => queryClient.getQueryData<any>(mailQueryKey)?.threads[0]?.url === 'a')
 
     await screen.getByTitle('Refresh').click()
-    await vi.waitUntil(() => useMailStore.getState().threads[0]?.url === 'b')
-    expect(useMailStore.getState().threads[0]?.url).toBe('b')
+    await vi.waitUntil(() => queryClient.getQueryData<any>(mailQueryKey)?.threads[0]?.url === 'b')
+    expect(queryClient.getQueryData<any>(mailQueryKey)?.threads[0]?.url).toBe('b')
   })
 })
