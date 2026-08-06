@@ -12,6 +12,7 @@ export default defineConfig({
       issuerId: '48f39427-c063-4e33-98d2-31de80aad0be',
       keyId: '8N27UWG9RG',
       projectType: 'macos',
+      openProject: false,
     },
     analytics: true,
   },
@@ -34,9 +35,7 @@ export default defineConfig({
         'storage',
         'cookies',
         'alarms',
-        'notifications',
         'webRequest',
-        'idle',
         'contextMenus',
       ],
       host_permissions: ['https://mail.google.com/**'],
@@ -55,9 +54,10 @@ export default defineConfig({
       homepage_url: 'https://github.com/rxliuli/gmail-notifier',
     }
     if (env.browser === 'chrome' || env.browser === 'edge') {
-      manifest.permissions!.push('offscreen')
+      manifest.permissions!.push('offscreen', 'notifications', 'idle')
     }
     if (env.browser === 'firefox') {
+      manifest.permissions!.push('notifications', 'idle')
       manifest.browser_specific_settings = {
         gecko: {
           id:
@@ -69,6 +69,23 @@ export default defineConfig({
       manifest.author = 'rxliuli'
     }
     return manifest
+  },
+  hooks: {
+    // Safari's MV3 service_worker background is badly limited (multiple
+    // WebKit/Safari-18 bugs: fetch(credentials:'include') and
+    // cookies.getAll() silently missing cookies from a service worker,
+    // confirmed via Apple's own developer forums). Rewriting it to the MV2
+    // `scripts` form routes through a more mature code path that doesn't
+    // have this problem. persistent: false keeps it non-persistent still.
+    'build:manifestGenerated': (wxt, manifest) => {
+      if (wxt.config.browser === 'safari' && manifest.background && 'service_worker' in manifest.background) {
+        const sw = manifest.background.service_worker
+        manifest.background = {
+          scripts: [sw],
+          persistent: false,
+        }
+      }
+    },
   },
   webExt: {
     disabled: true,
