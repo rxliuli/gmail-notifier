@@ -3,6 +3,47 @@ import App from './App.js'
 import './style.css'
 import { debugLog } from '@/lib/debugLog'
 
+// Root cause of a whole cluster of Safari-only extension-popup bugs, found
+// the hard way over one long debugging session (each looked unrelated until
+// they didn't):
+//   - No elastic/momentum scroll physics on scrollable content (unlike a
+//     normal Safari tab or the Chrome popup, both fine)
+//   - prefers-color-scheme sometimes not detected - popup rendered light
+//     while the exact same build, same OS appearance, rendered dark in a
+//     normal tab
+//   - The tab behind the popup, blurred, briefly visible THROUGH the popup
+//     (Safari's native vibrancy/blur-behind material showing through
+//     wherever nothing opaque had painted over it yet)
+//   - Scroll position not resetting when navigating between routes -
+//     confirmed live via DevTools that documentElement.scrollTop simply
+//     stayed at its old value after a route change
+//
+// All four traced back to the same trigger: the popup's native window
+// auto-resizing to match content height as it changes (switching routes,
+// long email threads, etc). WebKit's own Safari 26.2 changelog
+// (https://webkit.org/blog/17640/webkit-features-for-safari-26-2/) even
+// acknowledges "extension popups could open scrolled down and some
+// websites could flicker during scrolling" as a real, only-recently-fixed
+// bug class here - this isn't a one-off, it's a known rough edge in how
+// Safari's popup WKWebView synchronizes its native window with content.
+//
+// The fix - confirmed live, all four symptoms gone - is to never let the
+// window resize at all: pin it to one fixed size up front, before React
+// renders anything, so every route fits inside the same frame regardless of
+// its own content height. See style.css's `.safari-fixed-popup` rule for
+// the actual dimensions - body scrolls directly there (not a nested
+// overflow-auto div per page), which is also what restores proper
+// elastic/momentum physics: that's document-level scroll, the same kind a
+// normal tab gets, not the nested-div scroll that was one of the four
+// symptoms above.
+//
+// Chrome/Firefox already auto-size correctly and don't have any of this,
+// so it's scoped to Safari only. Set as early as possible, before the
+// first paint, so Safari never sees an unpinned frame even for a moment.
+if (import.meta.env.SAFARI) {
+  document.documentElement.classList.add('safari-fixed-popup')
+}
+
 const root = ReactDOM.createRoot(document.getElementById('root')!)
 root.render(<App />)
 

@@ -128,6 +128,27 @@ body {
   @apply w-2xl md:w-full min-h-96;
 }
 
+/* Safari only (class set from main.tsx via import.meta.env.SAFARI) - see
+   the comment there for the full root-cause writeup. A real height, not
+   min-height, so the popup's native window never sees content taller than
+   this and never has a reason to resize.
+
+   body scrolls directly (overflow-y: auto) rather than relying on each
+   page's own nested flex-1 scroll container. That's not just simpler, it's
+   necessary: a flex item needs a *definite*-height ancestor for its
+   flex-basis/grow math to actually bound and clip it - min-h-screen on each
+   page's wrapper is only a floor, so those nested divs were just growing to
+   fit their content instead of scrolling it, confirmed live. Document-level
+   scroll also happens to be what restores Safari's native elastic/momentum
+   physics, which nested overflow-auto divs don't get. */
+html.safari-fixed-popup,
+html.safari-fixed-popup body {
+  width: 672px;
+  height: 600px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
 @theme {
   --animate-spin-complete: spin-complete 0.5s ease-out forwards;
   --animate-spin-smooth: spin-smooth 0.3s ease-out forwards;
