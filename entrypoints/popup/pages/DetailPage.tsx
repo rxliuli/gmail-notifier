@@ -20,24 +20,41 @@ const ShadowDiv = root.div as NonNullable<typeof root.div>
 // on a dark background; re-inverting img/video cancels it out so photos and
 // logos aren't rendered as photonegatives.
 //
-// The extra contrast() matters for emails that use low-contrast text to
-// begin with (light gray "secondary info" on white, common for fine print /
-// error details) - invert() alone preserves the original color distance, so
-// text that was barely legible on white becomes barely legible on black
-// instead of actually improving. Pushing mid-tones further toward black/white
-// widens that gap instead of just relocating it.
+// Low-contrast text (light gray "secondary info" on white, common for fine
+// print / error details) needs extra help: invert() alone preserves the
+// original color distance, so text that was barely legible on white becomes
+// barely legible on black instead of actually improving.
+//
+// brightness(), not contrast(), fixes that gap: the host background is
+// forced to white, so after invert() it's pinned at pure black (0), where
+// brightness's multiply-by-b leaves it unchanged (0 * b = 0) - only the
+// non-zero text lightens. contrast() looks like the obvious tool for "low
+// contrast text" but is wrong here: it pivots around 50% gray, and inverted
+// light-gray text already lands below that pivot (same side as the black
+// background), so contrast pushes it *toward* black too, shrinking the gap
+// instead of widening it - confirmed live, it made previously-faint text
+// disappear entirely.
+const DARK_MODE_BRIGHTNESS = 1.5
+
 const DARK_MODE_FILTER_STYLE = `
   :host {
-    filter: invert(1) hue-rotate(180deg) contrast(1.3);
+    filter: invert(1) hue-rotate(180deg) brightness(${DARK_MODE_BRIGHTNESS});
     background: white;
   }
   img, video {
-    /* No contrast() here: unlike invert()/hue-rotate(), contrast() isn't its
-       own inverse, so repeating it would compound instead of cancel out.
-       The host's contrast(1.3) still applies once, as the outermost pass
-       over everything beneath it - a mild, acceptable tradeoff versus
-       doubling it. */
-    filter: invert(1) hue-rotate(180deg);
+    /* Order matters here, and it's the opposite of what's intuitive: the
+       brightness cancellation has to run BEFORE invert/hue-rotate, not
+       after. brightness() is a plain per-channel multiply (no pivot, unlike
+       contrast()), so multiplying by its exact reciprocal is a true inverse
+       - but only if it stays outside the two invert+hue-rotate pairs. Those
+       two pairs are each self-inverse and cancel to identity ONLY when they
+       sit immediately adjacent (host's invert/hue-rotate right after this
+       element's); sandwiching a brightness multiply between them (i.e.
+       after this element's invert/hue-rotate) breaks that adjacency and the
+       cancellation math no longer works out, leaving photos visibly
+       tinted. Putting it first keeps both pairs adjacent and cancels
+       exactly, so photos/logos render at their original brightness. */
+    filter: brightness(${1 / DARK_MODE_BRIGHTNESS}) invert(1) hue-rotate(180deg);
   }
 `
 
