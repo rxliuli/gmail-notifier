@@ -219,6 +219,20 @@ async function start() {
 
   browser.runtime.onInstalled.addListener(async () => {
     registerActionMenus(menus)
+
+    // Diagnostic: the exact raw request, no wrapping, no parsing, fired from
+    // inside an event listener callback instead of defineBackground's own
+    // top-level execution - testing the hypothesis that async requests made
+    // directly in that top-level flow specifically are what fail on Safari.
+    try {
+      const diagResp = await fetch('https://mail.google.com/mail/u/0/feed/atom?t=' + Date.now(), {
+        credentials: 'include',
+      })
+      const diagText = await diagResp.text()
+      await debugLog('DIAG (onInstalled) raw fetch ->', diagResp.status, diagText.slice(0, 200))
+    } catch (err) {
+      await debugLog('DIAG (onInstalled) raw fetch threw ->', err)
+    }
   })
   browser.contextMenus.onClicked.addListener(async (info) => {
     if (info.menuItemId === 'open-gmail') {
