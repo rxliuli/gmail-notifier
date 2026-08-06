@@ -1,5 +1,5 @@
-import selectAll, { Options, selectOne } from 'css-select'
-import { DefaultTreeAdapterMap, serialize, serializeOuter } from 'parse5'
+import selectAll, { selectOne, type Options } from 'css-select'
+import { serialize, serializeOuter, type DefaultTreeAdapterMap } from 'parse5'
 
 type Element = DefaultTreeAdapterMap['element']
 type Node = DefaultTreeAdapterMap['node']
@@ -27,7 +27,7 @@ export function xmldomAdapter(): Options<DefaultTreeAdapterMap['document'] | Ele
     // Check if each node (or one of its ancestors) is already contained in the
     // array.
     while (--idx > -1) {
-      node = ancestor = nodes[idx]
+      node = ancestor = nodes[idx]!
 
       // Temporarily remove the node under consideration
       nodes[idx] = null
@@ -78,10 +78,10 @@ export function xmldomAdapter(): Options<DefaultTreeAdapterMap['document'] | Ele
       var elem = null
 
       for (var i = 0, l = arr.length; i < l && !elem; i++) {
-        if (test(arr[i])) {
-          elem = arr[i]
+        if (test(arr[i]!)) {
+          elem = arr[i]!
         } else {
-          var childs = getChildren(arr[i])
+          var childs = getChildren(arr[i]!)
           if (childs && childs.length > 0) {
             elem = findOne(test, childs)
           }
@@ -93,9 +93,9 @@ export function xmldomAdapter(): Options<DefaultTreeAdapterMap['document'] | Ele
     findAll: function findAll(test: (elem: Element) => boolean, elems: Element[]): Element[] {
       var result: Element[] = []
       for (var i = 0, j = elems.length; i < j; i++) {
-        if (!isTag(elems[i])) continue
-        if (test(elems[i])) result.push(elems[i])
-        var childs = getChildren(elems[i])
+        if (!isTag(elems[i]!)) continue
+        if (test(elems[i]!)) result.push(elems[i]!)
+        var childs = getChildren(elems[i]!)
         if (childs) result = result.concat(findAll(test, childs))
       }
       return result

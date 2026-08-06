@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button'
-import { getOpenWebLink, openMailInWeb, ThreadMail } from '@/lib/api/gmail'
+import { getOpenWebLink, openMailInWeb, type ThreadMail } from '@/lib/api/gmail'
 import { useMailStore } from '@/lib/mailStore'
 import dayjs from 'dayjs'
 import { ArrowLeftIcon, ExternalLinkIcon, PaperclipIcon, ChevronsUpDownIcon, ChevronsDownUpIcon } from 'lucide-react'
@@ -8,6 +8,11 @@ import root from 'react-shadow'
 import { useCollapseStore } from '@/lib/collapseStore'
 import { createStyleSheets } from '@/lib/addStyle'
 import { useTheme } from '@/integrations/theme/ThemeProvider'
+
+// react-shadow's `root` is proxied via an index signature, which under
+// noUncheckedIndexedAccess types every property access as possibly
+// undefined even though the proxy always returns a component.
+const ShadowDiv = root.div as NonNullable<typeof root.div>
 
 // Emails ship their own (usually light, white-background) styling, which we
 // don't control. Inverting lightness while rotating hue back is the standard
@@ -31,9 +36,9 @@ const MailContent = memo((props: { contentHtml: string; styles: string[] }) => {
     return createStyleSheets(styles)
   }, [props.styles, resolvedTheme])
   return (
-    <root.div styleSheets={styleSheets}>
+    <ShadowDiv styleSheets={styleSheets}>
       <div dangerouslySetInnerHTML={{ __html: props.contentHtml }} style={{ overflowX: 'auto' }} />
-    </root.div>
+    </ShadowDiv>
   )
 })
 

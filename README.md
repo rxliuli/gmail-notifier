@@ -10,12 +10,11 @@ A **100% open-source** Gmail notifier extension for your browser - including the
 - **Quick Reply** - Reply to emails directly from the extension
 - **Bulk Operations** - Mark all emails as read with one click
 - **Modern UI** - Clean, intuitive interface that works seamlessly
-- **Privacy Focused** - All code is auditable, no hidden tracking
+- **Privacy Focused** - All code is auditable; the only telemetry is an anonymous daily install ping (no URLs, no page content, no behavioral data) via [extport](https://extport.dev)
 - **Self-Hostable** - Run your own instance if preferred
 
 ### Coming Soon
 
-- Dark mode support
 - Multiple account support
 - Customizable themes
 - Email filtering rules

@@ -130,14 +130,14 @@ export function parseAddressField(html: string): string[] {
   while ((match = regex.exec(decoded))) {
     if (match[1]) {
       const name = match[1].trim()
-      const email = match[2].trim()
+      const email = match[2]!.trim()
       if (name === email) {
         result.push(email)
       } else {
         result.push(`${name} <${email}>`)
       }
     } else {
-      const email = match[2].trim()
+      const email = match[2]!.trim()
       result.push(email)
     }
   }
@@ -164,7 +164,7 @@ export function extractThreadMail(text: string, baseUrl?: string): ThreadMail {
   // 2. Message count
   const messageCountText = getTextContent(querySelector('.maincontent font[color="#777"]', doc)) || ''
   const messageCountMatch = messageCountText.match(/(\d+) messages?/)
-  const messageCount = messageCountMatch ? parseInt(messageCountMatch[1], 10) : 0
+  const messageCount = messageCountMatch ? parseInt(messageCountMatch[1]!, 10) : 0
 
   // 3. CSS extracted from any <style> tags present in the document
   const styles = querySelectorAll('style', doc)
@@ -178,7 +178,7 @@ export function extractThreadMail(text: string, baseUrl?: string): ThreadMail {
     // Sender
     const senderInfo = getTextContent(querySelector('b', table))?.trim() || ''
     const senderEmailMatch = getInnerHTML(table)?.match(/<b>.*?<\/b>\s*&lt;([^&]+)&gt;/)
-    const senderEmail = senderEmailMatch ? senderEmailMatch[1].trim() : ''
+    const senderEmail = senderEmailMatch ? senderEmailMatch[1]!.trim() : ''
     // Time
     let time = getTextContent(querySelector('td[align="right"] font[size="-1"]', table)) || ''
     if (time) {
@@ -282,7 +282,7 @@ export function extractGmailInfo(url: string) {
   // For example: https://mail.google.com/mail/u/0?account_id=xxx&message_id=xxxx&view=conv&extsrc=atom
   const m = url.match(/u\/(?<n>\d+).*message_id=(?<thread>[^&]+)/)
   if (m && m.groups) {
-    return { n: m.groups.n, thread: m.groups.thread }
+    return { n: m.groups.n!, thread: m.groups.thread! }
   }
   // Compatible with u=0 format
   const n = url.match(/u[=\/](\d+)/)?.[1] || '0'
@@ -299,7 +299,9 @@ export async function getIk(n: string): Promise<string | null> {
   if (ikCache.has(n)) {
     return ikCache.get(n)!
   }
-  const page = (await browser.storage.session.get('page-' + n))['page-' + n] || `https://mail.google.com/mail/u/${n}/s/`
+  const page =
+    (await browser.storage.session.get<Record<string, string>>('page-' + n))['page-' + n] ||
+    `https://mail.google.com/mail/u/${n}/s/`
   async function next(href: string): Promise<string | null> {
     const r = await fetch(href, { credentials: 'include' })
     if (r.ok) {
@@ -479,8 +481,8 @@ export async function openMailInWeb(url: string) {
     await browser.tabs.create({ url: openWebLink })
     return
   }
-  await browser.tabs.update(tabs[0].id!, { url: openWebLink, active: true })
-  await browser.windows.update(tabs[0].windowId!, { focused: true })
+  await browser.tabs.update(tabs[0]!.id!, { url: openWebLink, active: true })
+  await browser.windows.update(tabs[0]!.windowId!, { focused: true })
 }
 
 export async function newEmail() {

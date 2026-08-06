@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { EmailThread } from './StateManager'
+import type { EmailThread } from './StateManager'
 
 interface MailState {
   path: 'list' | 'detail'

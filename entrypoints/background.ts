@@ -11,7 +11,7 @@ import {
   openMailInWeb,
   type Feed,
 } from '@/lib/api/gmail'
-import { PublicPath } from 'wxt/browser'
+import type { PublicPath } from 'wxt/browser'
 import { StateManager } from '@/lib/StateManager'
 import { registerActionMenus } from '@/lib/menu'
 import { menus } from '@/lib/constants'
@@ -107,7 +107,7 @@ export default defineBackground(async () => {
     if (newFeeds.length === 0) {
       return
     }
-    await sendNotification(stateManager, newFeeds[0])
+    await sendNotification(stateManager, newFeeds[0]!)
   })
 
   // listen to polling event

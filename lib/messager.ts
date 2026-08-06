@@ -1,5 +1,5 @@
 import { defineExtensionMessaging } from '@webext-core/messaging'
-import { PublicPath } from 'wxt/browser'
+import type { PublicPath } from 'wxt/browser'
 
 export const bgMessager = defineExtensionMessaging<{
   // popup to background

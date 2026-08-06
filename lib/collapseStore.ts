@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { createComputed } from 'zustand-computed'
-import { ReadonlyKeysOf } from 'type-fest'
+import type { ReadonlyKeysOf } from 'type-fest'
 
 interface CollapseState {
   // Which message contents are collapsed

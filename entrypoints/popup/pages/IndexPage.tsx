@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button'
 import { openMailInWeb, newEmail } from '@/lib/api/gmail'
-import { bgMessager, GmailAction, popupMessager } from '@/lib/messager'
+import { bgMessager, popupMessager, type GmailAction } from '@/lib/messager'
 import { useMutation } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import {
@@ -32,7 +32,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { FaDiscord, FaGithub } from 'react-icons/fa'
-import { EmailThread } from '@/lib/StateManager'
+import type { EmailThread } from '@/lib/StateManager'
 import { useState } from 'react'
 import { useEffectOnce } from '@/lib/utils/useEffectOnce'
 import { useTheme } from '@/integrations/theme/ThemeProvider'

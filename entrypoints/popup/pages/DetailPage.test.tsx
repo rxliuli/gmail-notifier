@@ -4,8 +4,8 @@ import { render } from 'vitest-browser-react'
 import { DetailPage } from './DetailPage'
 import { useMailStore } from '@/lib/mailStore'
 import { useCollapseStore } from '@/lib/collapseStore'
-import { EmailThread } from '@/lib/StateManager'
-import { ThreadMail } from '@/lib/api/gmail'
+import type { EmailThread } from '@/lib/StateManager'
+import type { ThreadMail } from '@/lib/api/gmail'
 import { ThemeProvider, useTheme } from '@/integrations/theme/ThemeProvider'
 import { ShadowProvider } from '@/integrations/shadow/ShadowProvider'
 
@@ -50,7 +50,7 @@ describe('DetailPage', () => {
 
   it('hides the collapse-all toggle for a single-message thread', async () => {
     useMailStore.setState({ path: 'detail', thread: makeThread(1) })
-    const screen = render(<DetailPage />)
+    const screen = await render(<DetailPage />)
     await expect.element(screen.getByTitle('Open in Gmail').first()).toBeInTheDocument()
     expect(screen.getByTitle('All Collapsed').query()).toBeNull()
     expect(screen.getByTitle('All Expanded').query()).toBeNull()
@@ -58,20 +58,20 @@ describe('DetailPage', () => {
 
   it('shows the collapse-all toggle for a multi-message thread', async () => {
     useMailStore.setState({ path: 'detail', thread: makeThread(3) })
-    const screen = render(<DetailPage />)
+    const screen = await render(<DetailPage />)
     const toggle = screen.getByTitle('All Collapsed').query() ?? screen.getByTitle('All Expanded').query()
     expect(toggle).not.toBeNull()
   })
 
   it.each([2, 3, 4, 5, 6, 7, 8])('accounts for every message with no message count (count=%i)', async (count) => {
     useMailStore.setState({ path: 'detail', thread: makeThread(count) })
-    const screen = render(<DetailPage />)
+    const screen = await render(<DetailPage />)
     expect(renderedMessageSlots(screen.container)).toBe(count)
   })
 
   it('expanding the collapsed group reveals the hidden messages (count=5)', async () => {
     useMailStore.setState({ path: 'detail', thread: makeThread(5) })
-    const screen = render(<DetailPage />)
+    const screen = await render(<DetailPage />)
     const indicator = screen.getByTestId('collapsed-indicator')
     await expect.element(indicator).toBeInTheDocument()
     await indicator.click()
@@ -86,21 +86,21 @@ describe('DetailPage', () => {
       return null
     }
 
-    let screen: ReturnType<typeof render> | undefined
+    let screen: Awaited<ReturnType<typeof render>> | undefined
 
     beforeEach(() => {
       localStorage.clear()
       document.body.classList.remove('light', 'dark')
     })
 
-    afterEach(() => {
-      screen?.unmount()
+    afterEach(async () => {
+      await screen?.unmount()
       screen = undefined
     })
 
     it('inverts the raw email HTML so it stays readable on a dark background', async () => {
       useMailStore.setState({ path: 'detail', thread: makeThread(1) })
-      screen = render(
+      screen = await render(
         <ShadowProvider container={document.body}>
           <ThemeProvider>
             <ForceTheme theme="dark" />
@@ -115,7 +115,7 @@ describe('DetailPage', () => {
 
     it('leaves the raw email HTML untouched in light mode', async () => {
       useMailStore.setState({ path: 'detail', thread: makeThread(1) })
-      screen = render(
+      screen = await render(
         <ShadowProvider container={document.body}>
           <ThemeProvider>
             <ForceTheme theme="light" />

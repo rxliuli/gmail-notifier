@@ -20,7 +20,7 @@ describe('ThemeProvider', () => {
   })
 
   it('applies a light/dark class to the body once resolved', async () => {
-    const screen = render(
+    const screen = await render(
       <ShadowProvider container={document.body}>
         <ThemeProvider>
           <ThemeSwitcher />
@@ -34,7 +34,7 @@ describe('ThemeProvider', () => {
   })
 
   it('switches the body class when the theme changes', async () => {
-    const screen = render(
+    const screen = await render(
       <ShadowProvider container={document.body}>
         <ThemeProvider>
           <ThemeSwitcher />

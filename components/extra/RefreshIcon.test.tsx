@@ -12,28 +12,28 @@ describe('RefreshIcon', () => {
   })
 
   it('renders without crashing', async () => {
-    const screen = render(<RefreshIcon loading={false} />)
+    const screen = await render(<RefreshIcon loading={false} />)
     await expect
       .element(screen.container.querySelector('svg'))
       .toBeInTheDocument()
   })
 
   it('applies spin animation when loading is true', async () => {
-    const screen = render(<RefreshIcon loading={true} />)
+    const screen = await render(<RefreshIcon loading={true} />)
     const icon = screen.container.querySelector('svg')
     await expect.element(icon).toHaveClass('animate-spin')
   })
 
   it('applies complete animation when loading changes from true to false', async () => {
-    const screen = render(<RefreshIcon loading={true} />)
-    screen.rerender(<RefreshIcon loading={false} />)
+    const screen = await render(<RefreshIcon loading={true} />)
+    await screen.rerender(<RefreshIcon loading={false} />)
     const icon = screen.container.querySelector('svg')
     await expect.element(icon).toHaveClass('animate-spin-complete')
   })
 
   it('removes complete animation after 500ms', async () => {
-    const screen = render(<RefreshIcon loading={true} />)
-    screen.rerender(<RefreshIcon loading={false} />)
+    const screen = await render(<RefreshIcon loading={true} />)
+    await screen.rerender(<RefreshIcon loading={false} />)
 
     vi.advanceTimersByTime(500)
 
@@ -42,7 +42,7 @@ describe('RefreshIcon', () => {
   })
 
   it('applies custom className', async () => {
-    const screen = render(
+    const screen = await render(
       <RefreshIcon loading={false} className="custom-class" />,
     )
     const icon = screen.container.querySelector('svg')
@@ -50,8 +50,8 @@ describe('RefreshIcon', () => {
   })
 
   it('cleans up timeout on unmount', async () => {
-    const screen = render(<RefreshIcon loading={true} />)
-    screen.unmount()
+    const screen = await render(<RefreshIcon loading={true} />)
+    await screen.unmount()
     // If the test passes without errors, it means the cleanup was successful
   })
 })

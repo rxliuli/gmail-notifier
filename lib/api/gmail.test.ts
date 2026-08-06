@@ -2,13 +2,13 @@ import { describe, it, expect } from 'vitest'
 import {
   extractThreadMail,
   extractRSS,
-  Feed,
   formatDate,
   getOpenWebLink,
   parseAddressField,
   extractGmailInfo,
   parseReplyTo,
-  ThreadMail,
+  type Feed,
+  type ThreadMail,
 } from './gmail'
 import { parseDocument, parseFeed } from 'htmlparser2'
 import { selectOne } from 'css-select'
@@ -74,19 +74,19 @@ describe('extractContent', () => {
     const content = (await import('./assets/content-plaintext.html?raw')).default
     const mail = extractThreadMail(content)
     expect(mail.subject).eq('Test Text')
-    expect(mail.messages[0].senderName).eq('璃 琉')
-    expect(mail.messages[0].senderEmail).eq('rxliuli@outlook.com')
-    expect(mail.messages[0].time).eq('2025-06-03T05:42:00.000Z')
-    expect(mail.messages[0].to).toEqual(['rxliuli@gmail.com'])
-    expect(mail.messages[0].cc).toEqual([])
-    expect(mail.messages[0].replyTo).undefined
-    expect(mail.messages[0].contentHtml).includes('Test PlainText')
+    expect(mail.messages[0]!.senderName).eq('璃 琉')
+    expect(mail.messages[0]!.senderEmail).eq('rxliuli@outlook.com')
+    expect(mail.messages[0]!.time).eq('2025-06-03T05:42:00.000Z')
+    expect(mail.messages[0]!.to).toEqual(['rxliuli@gmail.com'])
+    expect(mail.messages[0]!.cc).toEqual([])
+    expect(mail.messages[0]!.replyTo).undefined
+    expect(mail.messages[0]!.contentHtml).includes('Test PlainText')
   })
   it('html', async () => {
     const content = (await import('./assets/content-html.html?raw')).default
     const mail = extractThreadMail(content)
     expect(mail.subject).eq('Test HTML')
-    expect(mail.messages[0].contentHtml).includes('<i>Hello</i>').includes('<b>World</b>')
+    expect(mail.messages[0]!.contentHtml).includes('<i>Hello</i>').includes('<b>World</b>')
   })
   it('extracts <style> tags from the document', async () => {
     const content = (await import('./assets/content-html.html?raw')).default
@@ -98,7 +98,7 @@ describe('extractContent', () => {
   it('image', async () => {
     const content = (await import('./assets/content-image.html?raw')).default
     const main = extractThreadMail(content, 'https://mail.google.com/mail/u/0')
-    const html = main.messages[0].contentHtml
+    const html = main.messages[0]!.contentHtml
     expect(html).includes('<img')
     const doc = new DOMParser().parseFromString(html, 'text/html')
     const img = doc.querySelector('img') as HTMLImageElement
@@ -200,7 +200,7 @@ describe('parseReplyTo', () => {
     expect(parseReplyTo(thread, 'me@gmail.com')).toEqual({ email: 'them@example.com', name: 'Them' })
   })
   it('returns undefined when every message is from "me"', () => {
-    const selfOnly: ThreadMail = { ...thread, messages: [thread.messages[0]] }
+    const selfOnly: ThreadMail = { ...thread, messages: [thread.messages[0]!] }
     expect(parseReplyTo(selfOnly, 'me@gmail.com')).toBeUndefined()
   })
 })

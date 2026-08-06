@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it, Mock, vi } from 'vitest'
-import { GmailApi, StateManager } from './StateManager'
-import { Feed, RSSInfo } from './api/gmail'
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
+import { StateManager, type GmailApi } from './StateManager'
+import type { Feed, RSSInfo } from './api/gmail'
 
 describe('StateManager', () => {
   let api: {

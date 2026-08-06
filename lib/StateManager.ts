@@ -1,5 +1,5 @@
 import { sortBy, uniqBy } from 'es-toolkit'
-import { Feed, RSSInfo, ThreadMail } from './api/gmail'
+import type { Feed, RSSInfo, ThreadMail } from './api/gmail'
 
 export interface EmailThread extends Feed, ThreadMail {}
 
