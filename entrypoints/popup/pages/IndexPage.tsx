@@ -50,12 +50,17 @@ function MailItem({
     cmd: Exclude<GmailAction['cmd'], 'markAllAsRead'>,
     msg: string,
   ) {
-    await bgMessager.sendMessage('gmailAction', {
-      cmd,
-      url: thread.url,
-    })
-    await store.refresh()
-    toast.success(msg)
+    try {
+      await bgMessager.sendMessage('gmailAction', {
+        cmd,
+        url: thread.url,
+      })
+      await store.refresh()
+      toast.success(msg)
+    } catch (err) {
+      console.error(err)
+      toast.error(msg + ' failed')
+    }
   }
   return (
     <div

@@ -170,6 +170,25 @@ describe('StateManager', () => {
       expect(api.getRSS).toBeCalledTimes(2)
     })
 
+    it('markAsRead still resolves and keeps the mutation when a listener throws', async () => {
+      // Regression test: notify() fans out to independent listeners (badge
+      // update, push a refresh to the popup, etc). One of them failing (a
+      // real case on Safari: pushing to the popup when its message channel
+      // is in a bad state) used to abort the whole notify() call and
+      // propagate back to the caller - turning a successful mutation into
+      // an apparent failure (surfaced as an error toast for markAllAsRead,
+      // and a silent no-op for the single-item actions, which had no catch
+      // at all).
+      const stateManager = new StateManager(api)
+      await seedOneThread(stateManager)
+      api.markAsRead.mockImplementation(async () => {})
+      stateManager.on(async () => {
+        throw new Error('a listener, e.g. pushing to the popup, failed')
+      })
+      await expect(stateManager.markAsRead(feed.url)).resolves.toBeUndefined()
+      expect(stateManager.threads).toEqual([])
+    })
+
     it('markAsUnread makes the thread unread again', async () => {
       const stateManager = new StateManager(api)
       await seedOneThread(stateManager)

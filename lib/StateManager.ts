@@ -52,7 +52,19 @@ export class StateManager {
       })
     }
     for (const cb of this.listeners) {
-      await cb(this.threads)
+      // Isolate each listener: this loop fans out to independent concerns
+      // (badge update, notification, pushing 'refreshPopup' to the popup) -
+      // one of them failing (e.g. pushing to the popup when its message
+      // channel is in a bad state, seen on Safari) must not abort the rest
+      // or propagate back to notify()'s caller. Without this, a single
+      // listener failing here turned mundane actions like markAsRead into
+      // an apparent failure for the caller - the mutation itself (in-memory
+      // state, storage write) had already fully succeeded by this point.
+      try {
+        await cb(this.threads)
+      } catch (err) {
+        await debugLog('notify: a listener failed ->', err)
+      }
     }
     this.threads.forEach((it) => {
       this.notifiedEmails.add(it.url)
