@@ -1,10 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render } from 'vitest-browser-react'
-import { DetailPage } from './DetailPage'
-import { useMailStore } from '@/lib/mailStore'
+import { fakeBrowser } from '@webext-core/fake-browser'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { RouterProvider } from '@tanstack/react-router'
 import { useCollapseStore } from '@/lib/collapseStore'
 import type { EmailThread } from '@/lib/StateManager'
 import type { ThreadMail } from '@/lib/api/gmail'
+
+vi.stubGlobal('browser', fakeBrowser)
+
+const { createAppRouter } = await import('../router')
 
 function makeThread(messageCount: number, overrides: Partial<EmailThread> = {}): EmailThread {
   const messages: ThreadMail['messages'] = Array.from({ length: messageCount }, (_, i) => ({
@@ -19,7 +24,7 @@ function makeThread(messageCount: number, overrides: Partial<EmailThread> = {}):
   return {
     title: 'Test',
     summary: 'summary',
-    url: 'https://mail.google.com/mail/u/0/?account_id=test@test.com&message_id=abc123&view=conv&extsrc=atom',
+    url: `https://mail.google.com/mail/u/0/?account_id=test@test.com&message_id=abc${messageCount}&view=conv&extsrc=atom`,
     modified: '2025-06-03T05:42:00.000Z',
     author: { name: 'Test', email: 'test@test.com' },
     subject: 'Test Subject',
@@ -28,6 +33,19 @@ function makeThread(messageCount: number, overrides: Partial<EmailThread> = {}):
     styles: [],
     ...overrides,
   }
+}
+
+// DetailPage now derives its thread from useMailQuery (storage.local) +
+// the route's $threadUrl param instead of a directly-injected store value -
+// seed storage and navigate a fresh router straight to that thread's route.
+async function renderDetail(thread: EmailThread) {
+  await fakeBrowser.storage.local.set({ email: 'me@example.com', threads: [thread] })
+  const router = createAppRouter([`/detail/${encodeURIComponent(thread.url)}`])
+  return render(
+    <QueryClientProvider client={new QueryClient()}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
+  )
 }
 
 // Every message must end up either directly rendered or accounted for by a
@@ -41,34 +59,32 @@ function renderedMessageSlots(container: HTMLElement) {
 
 describe('DetailPage', () => {
   beforeEach(() => {
+    fakeBrowser.reset()
     useCollapseStore.setState({ contentIndexes: new Set(), groupIndexes: new Set(), count: 0 })
-    useMailStore.setState({ path: 'list', thread: null })
   })
 
   it('hides the collapse-all toggle for a single-message thread', async () => {
-    useMailStore.setState({ path: 'detail', thread: makeThread(1) })
-    const screen = await render(<DetailPage />)
+    const screen = await renderDetail(makeThread(1))
     await expect.element(screen.getByTitle('Open in Gmail').first()).toBeInTheDocument()
     expect(screen.getByTitle('All Collapsed').query()).toBeNull()
     expect(screen.getByTitle('All Expanded').query()).toBeNull()
   })
 
   it('shows the collapse-all toggle for a multi-message thread', async () => {
-    useMailStore.setState({ path: 'detail', thread: makeThread(3) })
-    const screen = await render(<DetailPage />)
+    const screen = await renderDetail(makeThread(3))
+    await expect.element(screen.getByTitle('Open in Gmail').first()).toBeInTheDocument()
     const toggle = screen.getByTitle('All Collapsed').query() ?? screen.getByTitle('All Expanded').query()
     expect(toggle).not.toBeNull()
   })
 
   it.each([2, 3, 4, 5, 6, 7, 8])('accounts for every message with no message count (count=%i)', async (count) => {
-    useMailStore.setState({ path: 'detail', thread: makeThread(count) })
-    const screen = await render(<DetailPage />)
+    const screen = await renderDetail(makeThread(count))
+    await vi.waitUntil(() => renderedMessageSlots(screen.container) > 0)
     expect(renderedMessageSlots(screen.container)).toBe(count)
   })
 
   it('expanding the collapsed group reveals the hidden messages (count=5)', async () => {
-    useMailStore.setState({ path: 'detail', thread: makeThread(5) })
-    const screen = await render(<DetailPage />)
+    const screen = await renderDetail(makeThread(5))
     const indicator = screen.getByTestId('collapsed-indicator')
     await expect.element(indicator).toBeInTheDocument()
     await indicator.click()
@@ -91,8 +107,8 @@ describe('DetailPage', () => {
     })
 
     it('scopes the invert filter to a prefers-color-scheme: dark media query', async () => {
-      useMailStore.setState({ path: 'detail', thread: makeThread(1) })
-      screen = await render(<DetailPage />)
+      screen = await renderDetail(makeThread(1))
+      await vi.waitUntil(() => [...screen!.container.querySelectorAll('*')].some((el) => el.shadowRoot))
       const host = [...screen.container.querySelectorAll('*')].find((el) => el.shadowRoot) as HTMLElement
       await vi.waitUntil(() => host.shadowRoot!.adoptedStyleSheets.length > 0)
       const mediaRules = [...host.shadowRoot!.adoptedStyleSheets]
@@ -116,8 +132,8 @@ describe('DetailPage', () => {
       // landing on the black :host background and vanishing entirely -
       // confirmed live via DevTools on a real email before this was fixed
       // with an explicit, always-on `:host { color: #000 }` reset.
-      useMailStore.setState({ path: 'detail', thread: makeThread(1) })
-      screen = await render(<DetailPage />)
+      screen = await renderDetail(makeThread(1))
+      await vi.waitUntil(() => [...screen!.container.querySelectorAll('*')].some((el) => el.shadowRoot))
       const host = [...screen.container.querySelectorAll('*')].find((el) => el.shadowRoot) as HTMLElement
       await vi.waitUntil(() => host.shadowRoot!.querySelector('p') !== null)
       const unstyledText = host.shadowRoot!.querySelector('p')!

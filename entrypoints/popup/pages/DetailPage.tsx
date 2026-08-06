@@ -1,12 +1,19 @@
 import { Button } from '@/components/ui/button'
 import { getOpenWebLink, openMailInWeb, type ThreadMail } from '@/lib/api/gmail'
-import { useMailStore } from '@/lib/mailStore'
+import { useMailQuery } from '@/lib/useMailQuery'
+import type { EmailThread } from '@/lib/StateManager'
+import { getRouteApi, useNavigate } from '@tanstack/react-router'
 import dayjs from 'dayjs'
 import { ArrowLeftIcon, ExternalLinkIcon, PaperclipIcon, ChevronsUpDownIcon, ChevronsDownUpIcon } from 'lucide-react'
-import { memo, useMemo, useRef } from 'react'
+import { memo, useEffect, useMemo } from 'react'
 import root from 'react-shadow'
 import { useCollapseStore } from '@/lib/collapseStore'
 import { createStyleSheets } from '@/lib/addStyle'
+
+// Not importing detailRoute directly from router.tsx: that file imports
+// this one (as the route's component), so a direct import would be
+// circular. getRouteApi() looks the route up by its string id instead.
+const detailRouteApi = getRouteApi('/detail/$threadUrl')
 
 // react-shadow's `root` is proxied via an index signature, which under
 // noUncheckedIndexedAccess types every property access as possibly
@@ -210,17 +217,31 @@ const MailMessage = function MailMessage(props: {
 }
 
 export function DetailPage() {
-  const store = useMailStore()
-  const messageCount = store.thread?.messageCount ?? 0
-  const lastMessageCount = useRef(0)
+  const { threadUrl } = detailRouteApi.useParams()
+  const navigate = useNavigate()
+  const mailQuery = useMailQuery()
+  const thread = mailQuery.data?.threads.find((t) => t.url === decodeURIComponent(threadUrl))
 
+  const messageCount = thread?.messageCount ?? 0
   const collapseStore = useCollapseStore()
-  if (lastMessageCount.current !== messageCount) {
+  // Not called inline in the render body: thread now arrives async (via
+  // useMailQuery, not a synchronously-set store value), so DetailPage
+  // legitimately renders once before it resolves - calling a store setter
+  // mid-render for that first, pre-thread pass triggered React's "Cannot
+  // update a component while rendering a different component" warning.
+  useEffect(() => {
     collapseStore.setCount(messageCount)
-    lastMessageCount.current = messageCount
-  }
+  }, [messageCount])
 
-  const thread = store.thread
+  useEffect(() => {
+    // The thread this route points at isn't in the list (e.g. archived/
+    // deleted from elsewhere, or removed on the next refresh) - once the
+    // query has actually resolved, nothing sensible is left to show here.
+    if (mailQuery.data && !thread) {
+      navigate({ to: '/' })
+    }
+  }, [mailQuery.data, thread, navigate])
+
   if (!thread) {
     return <></>
   }
@@ -230,6 +251,7 @@ export function DetailPage() {
   return (
     <div className="flex flex-col min-h-screen">
       <DetailToolbar
+        thread={thread}
         messageCount={messageCount}
         allCollapsed={collapseStore.hasCollapsed}
         onToggleAll={collapseStore.toggleAll}
@@ -270,12 +292,17 @@ export function DetailPage() {
 // which has been removed from this version. If you want to add reply functionality,
 // consider implementing it using Gmail's web interface directly.
 
-function DetailToolbar(props: { messageCount: number; allCollapsed: boolean; onToggleAll: () => void }) {
-  const store = useMailStore()
-  const thread = store.thread!
+function DetailToolbar(props: {
+  thread: EmailThread
+  messageCount: number
+  allCollapsed: boolean
+  onToggleAll: () => void
+}) {
+  const navigate = useNavigate()
+  const { thread } = props
   return (
     <div className="flex items-center px-4 py-2 bg-background shadow-sm border-b border-border gap-2 sticky top-0 z-10">
-      <Button size="icon" variant="ghost" className="h-8 w-8" onClick={store.back}>
+      <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => navigate({ to: '/' })}>
         <ArrowLeftIcon className="w-4 h-4" />
       </Button>
       <a

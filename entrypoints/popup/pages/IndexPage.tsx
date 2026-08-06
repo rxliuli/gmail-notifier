@@ -1,7 +1,8 @@
 import { Button } from '@/components/ui/button'
 import { openMailInWeb, newEmail } from '@/lib/api/gmail'
-import { bgMessager, popupMessager, type GmailAction } from '@/lib/messager'
+import { bgMessager, type GmailAction } from '@/lib/messager'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from '@tanstack/react-router'
 import { mailQueryKey, useMailQuery } from '@/lib/useMailQuery'
 import dayjs from 'dayjs'
 import {
@@ -17,9 +18,6 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { RefreshIcon } from '@/components/extra/RefreshIcon'
-import { useMailStore } from '@/lib/mailStore'
-import { DetailPage } from './DetailPage'
-import { DebugLogPage } from './DebugLogPage'
 import { toast } from 'sonner'
 import {
   DropdownMenu,
@@ -30,7 +28,6 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { FaDiscord, FaGithub } from 'react-icons/fa'
 import type { EmailThread } from '@/lib/StateManager'
-import { useEffectOnce } from '@/lib/utils/useEffectOnce'
 import type { PublicPath } from 'wxt/browser'
 
 function MailItem({
@@ -134,7 +131,7 @@ function MailItem({
 }
 
 function Toolbar() {
-  const store = useMailStore()
+  const navigate = useNavigate()
   const mailQuery = useMailQuery()
   const queryClient = useQueryClient()
   const refreshMutation = useMutation({
@@ -171,7 +168,7 @@ function Toolbar() {
         <img src="/icon/48.png" alt="Gmail Notifier" className="w-6 h-6" />
       </div>
       <span className="font-medium text-foreground flex-1">
-        {mailQuery.data?.email} ({mailQuery.data?.threads.length ?? 0})
+        {mailQuery.data?.email ? `${mailQuery.data.email} (${mailQuery.data.threads.length})` : 'Gmail Notifier'}
       </span>
       {(mailQuery.data?.threads.length ?? 0) > 0 && (
         <Button
@@ -232,7 +229,7 @@ function Toolbar() {
             </a>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => store.goDebugLog()}>
+          <DropdownMenuItem onClick={() => navigate({ to: '/debug' })}>
             <BugIcon />
             Debug Log
           </DropdownMenuItem>
@@ -275,12 +272,12 @@ function MailList({
   )
 }
 
-function HomePage() {
-  const store = useMailStore()
+export function IndexPage() {
+  const navigate = useNavigate()
   const mailQuery = useMailQuery()
 
   async function onSelectFeed(thread: EmailThread) {
-    store.go(thread)
+    navigate({ to: '/detail/$threadUrl', params: { threadUrl: encodeURIComponent(thread.url) } })
     if (import.meta.env.PROD) {
       await bgMessager.sendMessage('gmailAction', {
         cmd: 'viewed',
@@ -289,52 +286,20 @@ function HomePage() {
     }
   }
 
-  if (!mailQuery.data?.email) {
-    return (
-      <div className="flex flex-col items-center justify-center h-screen gap-2">
-        <a href={'https://mail.google.com/mail/u/0/#inbox'} target="_blank">
-          <Button>Please login to Gmail</Button>
-        </a>
-        <Button variant="ghost" size="sm" onClick={() => store.goDebugLog()}>
-          <BugIcon />
-          Debug Log
-        </Button>
-      </div>
-    )
-  }
-
   return (
-    <div>
+    <div className="flex flex-col min-h-screen">
       <Toolbar />
-      <MailList threads={mailQuery.data.threads} onSelectFeed={onSelectFeed} />
+      <div className="flex-1 overflow-y-auto">
+        {mailQuery.data?.email ? (
+          <MailList threads={mailQuery.data.threads} onSelectFeed={onSelectFeed} />
+        ) : (
+          <div className="flex flex-col items-center justify-center gap-2 py-16">
+            <a href={'https://mail.google.com/mail/u/0/#inbox'} target="_blank">
+              <Button>Please login to Gmail</Button>
+            </a>
+          </div>
+        )}
+      </div>
     </div>
   )
-}
-
-export function IndexPage() {
-  const store = useMailStore()
-  const queryClient = useQueryClient()
-  useEffectOnce(() => {
-    // useMailQuery already reads whatever background last wrote as soon as
-    // this mounts - no separate "show cached snapshot" pull needed here
-    // anymore. This only needs to (a) invalidate the query when background
-    // pushes 'refreshPopup', so any mounted useMailQuery re-reads storage,
-    // and (b) kick off an actual fresh remote fetch, since background's own
-    // alarm/webRequest triggers only run on their own schedule and without
-    // this the popup can sit on stale data until one of those fires.
-    popupMessager.onMessage('refreshPopup', () => {
-      queryClient.invalidateQueries({ queryKey: mailQueryKey })
-    })
-    bgMessager.sendMessage('refreshThreads', undefined)
-    return () => {
-      popupMessager.removeAllListeners()
-    }
-  })
-  if (store.path === 'detail') {
-    return <DetailPage />
-  }
-  if (store.path === 'debug') {
-    return <DebugLogPage />
-  }
-  return <HomePage />
 }
