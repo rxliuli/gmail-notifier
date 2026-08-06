@@ -1,4 +1,4 @@
-import { bgMessager, offscreenMessager, popupMessager } from '@/lib/messager'
+import { bgMessager, popupMessager } from '@/lib/messager'
 import {
   archiveMail,
   checkLoginStatus,
@@ -36,8 +36,7 @@ async function sendNotification(stateManager: StateManager, feed: Feed) {
   }
 
   // Safari doesn't support the notifications API (same "unsupported manifest
-  // key" warning as idle) - skip instead of throwing and losing the rest of
-  // this function (badge/offscreen playback) along with it.
+  // key" warning as idle) - skip instead of throwing.
   if (!browser.notifications) {
     await debugLog(
       'sendNotification: browser.notifications unsupported, skipping',
@@ -62,18 +61,6 @@ async function sendNotification(stateManager: StateManager, feed: Feed) {
     console.log('auto clear notification', notificationId)
     await browser.notifications.clear(notificationId)
   }, 10 * 1000)
-
-  if (import.meta.env.CHROME || import.meta.env.EDGE) {
-    const hasDocument = await browser.offscreen.hasDocument()
-    if (!hasDocument) {
-      await browser.offscreen.createDocument({
-        url: '/offscreen.html',
-        reasons: ['DOM_SCRAPING', 'AUDIO_PLAYBACK'],
-        justification: 'Gmail Notifier',
-      })
-    }
-    await offscreenMessager.sendMessage('playAudio', '/audio/notification1.mp3')
-  }
 }
 
 export default defineBackground(async () => {

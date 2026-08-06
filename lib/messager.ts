@@ -1,5 +1,4 @@
 import { defineExtensionMessaging } from '@webext-core/messaging'
-import type { PublicPath } from 'wxt/browser'
 
 export const bgMessager = defineExtensionMessaging<{
   // popup to background
@@ -17,12 +16,6 @@ export type GmailAction =
       cmd: 'markAllAsRead'
       urls: string[]
     }
-
-interface OffscreenApi {
-  playAudio(path: PublicPath): void
-}
-
-export const offscreenMessager = defineExtensionMessaging<OffscreenApi>()
 
 export const popupMessager = defineExtensionMessaging<{
   refreshPopup(): void

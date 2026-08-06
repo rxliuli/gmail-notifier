@@ -54,7 +54,7 @@ export default defineConfig({
       homepage_url: 'https://github.com/rxliuli/gmail-notifier',
     }
     if (env.browser === 'chrome' || env.browser === 'edge') {
-      manifest.permissions!.push('offscreen', 'notifications', 'idle')
+      manifest.permissions!.push('notifications', 'idle')
     }
     if (env.browser === 'firefox') {
       manifest.permissions!.push('notifications', 'idle')
