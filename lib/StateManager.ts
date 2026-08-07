@@ -37,20 +37,17 @@ export class StateManager {
   }
 
   private async notify() {
-    if ('browser' in globalThis || 'chrome' in globalThis) {
-      // storage.local, not storage.session: session storage only reached
-      // Safari in 16.4 and has been reported flaky there since (Apple dev
-      // forum threads on storage.session/storage.local both returning
-      // stale/undefined data). local is universally reliable across every
-      // target browser, and persisting across restarts is fine here - the
-      // popup would rather show last-known state than nothing.
-      await browser.storage.local.set({
-        isLoggedIn: this.isLoggedIn,
-        email: this.email,
-        threads: this.threads,
-        notifiedEmails: Array.from(this.notifiedEmails),
-      })
-    }
+    // storage.local, not storage.session: session storage only reached
+    // Safari in 16.4 and has been reported flaky there since (Apple dev
+    // forum threads on storage.session/storage.local both returning
+    // stale/undefined data). local is universally reliable across every
+    // target browser, and persisting across restarts is fine here - the
+    // popup would rather show last-known state than nothing.
+    await browser.storage.local.set({
+      isLoggedIn: this.isLoggedIn,
+      email: this.email,
+      threads: this.threads,
+    })
     for (const cb of this.listeners) {
       // Isolate each listener: this loop fans out to independent concerns
       // (badge update, notification, pushing 'refreshPopup' to the popup) -
@@ -66,9 +63,37 @@ export class StateManager {
         await debugLog('notify: a listener failed ->', err)
       }
     }
-    this.threads.forEach((it) => {
-      this.notifiedEmails.add(it.url)
+    // Replace, don't accumulate: notifiedEmails is only ever queried against
+    // urls still in `threads` (see getNewThreads), so remembering urls that
+    // dropped out - read, archived, deleted - is dead weight. Left to grow
+    // forever it'd make the storage.local write below an unbounded history
+    // of every email this install has ever seen. Rebuilding it from the
+    // current threads each time keeps it naturally bounded to "currently
+    // relevant" and, as a side effect, lets an email that gets manually
+    // marked unread again in Gmail itself be treated as new again too.
+    this.notifiedEmails = new Set(this.threads.map((it) => it.url))
+    // A separate write, after the replace above: this has to reflect *this*
+    // batch's notifiedEmails, but the isLoggedIn/email/threads write above
+    // has to happen before the listeners loop (it pushes a 'refreshPopup'
+    // message - the popup re-reads storage.local right after receiving it,
+    // so that data must already be current by then). notifiedEmails isn't
+    // read by the popup, only by restore() at startup, so it's safe to
+    // persist it after the fact instead.
+    await browser.storage.local.set({
+      notifiedEmails: Array.from(this.notifiedEmails),
     })
+  }
+
+  // Restores notifiedEmails from the last notify() call's storage write.
+  // Without this, a fresh StateManager (every service worker respawn, which
+  // is frequent under MV3) starts with an empty notifiedEmails - the same
+  // still-unread thread then looks "new" again on every restart and gets
+  // re-notified repeatedly until it's actually read, not just once.
+  async restore() {
+    const { notifiedEmails } = await browser.storage.local.get(['notifiedEmails'])
+    if (Array.isArray(notifiedEmails)) {
+      this.notifiedEmails = new Set(notifiedEmails)
+    }
   }
 
   getNewThreads() {

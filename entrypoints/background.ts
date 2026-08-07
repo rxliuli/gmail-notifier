@@ -97,6 +97,7 @@ async function start() {
       await markAsUnread(url)
     },
   })
+  await stateManager.restore()
   // badge listener
   stateManager.on(async () => {
     await updateBadge(stateManager.getUnreadThreads().length)

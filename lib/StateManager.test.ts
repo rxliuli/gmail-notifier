@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
+import { fakeBrowser } from '@webext-core/fake-browser'
 import { StateManager, type GmailApi } from './StateManager'
 import type { Feed, RSSInfo } from './api/gmail'
+
+vi.stubGlobal('browser', fakeBrowser)
 
 describe('StateManager', () => {
   let api: {
@@ -8,6 +11,7 @@ describe('StateManager', () => {
   }
   let feed: Feed
   beforeEach(() => {
+    fakeBrowser.reset()
     api = {
       checkLoginStatus: vi.fn(),
       getRSS: vi.fn(),
@@ -262,6 +266,56 @@ describe('StateManager', () => {
       await stateManager.viewed(feed.url)
       await stateManager.clearViewed()
       expect(stateManager.threads.map((it) => it.url)).toEqual([secondFeed.url])
+    })
+  })
+
+  describe('notifiedEmails persistence', () => {
+    async function seedOneThread(stateManager: StateManager) {
+      api.checkLoginStatus.mockImplementation(async () => true)
+      api.getRSS.mockImplementation(
+        async () => ({ email: 'test@test.com', modified: feed.modified, feeds: [feed] }) satisfies RSSInfo,
+      )
+      api.getThreadMail.mockImplementation(async () => ({ subject: 'x', messageCount: 1, messages: [], styles: [] }))
+      await stateManager.fetchThreads()
+    }
+
+    it('drops a notifiedEmails entry once its thread is no longer present, instead of accumulating forever', async () => {
+      const stateManager = new StateManager(api)
+      await seedOneThread(stateManager)
+      expect(stateManager.notifiedEmails.has(feed.url)).toBe(true)
+      api.markAsRead.mockImplementation(async () => {})
+      await stateManager.markAsRead(feed.url)
+      expect(stateManager.notifiedEmails.has(feed.url)).toBe(false)
+    })
+
+    it('restore() seeds notifiedEmails from the last notify() call storage write', async () => {
+      await browser.storage.local.set({ notifiedEmails: [feed.url] })
+      const stateManager = new StateManager(api)
+      await stateManager.restore()
+      expect(stateManager.notifiedEmails.has(feed.url)).toBe(true)
+    })
+
+    it('restore() leaves notifiedEmails empty when nothing was saved yet', async () => {
+      const stateManager = new StateManager(api)
+      await stateManager.restore()
+      expect(stateManager.notifiedEmails.size).toBe(0)
+    })
+
+    it('does not re-notify an already-notified thread after a simulated service worker restart', async () => {
+      const beforeRestart = new StateManager(api)
+      await seedOneThread(beforeRestart)
+
+      // A fresh instance with empty in-memory state, exactly like a
+      // respawned service worker - restore() is what's supposed to stand in
+      // for the state that would otherwise have been lost.
+      const afterRestart = new StateManager(api)
+      await afterRestart.restore()
+      const seenDuringNotify: string[] = []
+      afterRestart.on(async () => {
+        seenDuringNotify.push(...afterRestart.getNewThreads().map((it) => it.url))
+      })
+      await seedOneThread(afterRestart)
+      expect(seenDuringNotify).toEqual([])
     })
   })
 

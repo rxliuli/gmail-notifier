@@ -12,7 +12,6 @@ export default defineConfig({
       issuerId: '48f39427-c063-4e33-98d2-31de80aad0be',
       keyId: '8N27UWG9RG',
       projectType: 'macos',
-      openProject: true,
     },
     analytics: true,
   },
