@@ -12,7 +12,7 @@ export default defineConfig({
       issuerId: '48f39427-c063-4e33-98d2-31de80aad0be',
       keyId: '8N27UWG9RG',
       projectType: 'macos',
-      openProject: false,
+      openProject: true,
     },
     analytics: true,
   },
@@ -30,7 +30,8 @@ export default defineConfig({
   manifest: (env) => {
     const manifest: UserManifest = {
       name: 'Gmail Notifier',
-      description: 'Gmail Notifier on Browser',
+      description:
+        'Get notified of new emails in your browser and quickly manage your messages.',
       permissions: [
         'storage',
         'cookies',
@@ -68,6 +69,9 @@ export default defineConfig({
       // @ts-expect-error
       manifest.author = 'rxliuli'
     }
+    if (env.browser === 'safari') {
+      manifest.name = 'Inbox Notifier for Gmail'
+    }
     return manifest
   },
   hooks: {
@@ -78,7 +82,11 @@ export default defineConfig({
     // `scripts` form routes through a more mature code path that doesn't
     // have this problem. persistent: false keeps it non-persistent still.
     'build:manifestGenerated': (wxt, manifest) => {
-      if (wxt.config.browser === 'safari' && manifest.background && 'service_worker' in manifest.background) {
+      if (
+        wxt.config.browser === 'safari' &&
+        manifest.background &&
+        'service_worker' in manifest.background
+      ) {
         const sw = manifest.background.service_worker
         manifest.background = {
           scripts: [sw],
