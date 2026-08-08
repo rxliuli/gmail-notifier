@@ -2,20 +2,16 @@ import { Button } from '@/components/ui/button'
 import { useNavigate } from '@tanstack/react-router'
 import { clearDebugLogs, getDebugLogs } from '@/lib/debugLog'
 import { ArrowLeftIcon, CopyIcon, RotateCwIcon, Trash2Icon } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+
+const debugLogsQueryKey = ['debugLogs']
 
 export function DebugLogPage() {
   const navigate = useNavigate()
-  const [logs, setLogs] = useState<string[]>([])
-
-  async function load() {
-    setLogs(await getDebugLogs())
-  }
-
-  useEffect(() => {
-    load()
-  }, [])
+  const queryClient = useQueryClient()
+  const logsQuery = useQuery({ queryKey: debugLogsQueryKey, queryFn: getDebugLogs })
+  const logs = logsQuery.data ?? []
 
   async function copy() {
     await navigator.clipboard.writeText(logs.join('\n'))
@@ -24,7 +20,7 @@ export function DebugLogPage() {
 
   async function clear() {
     await clearDebugLogs()
-    await load()
+    await queryClient.invalidateQueries({ queryKey: debugLogsQueryKey })
   }
 
   return (
@@ -34,7 +30,7 @@ export function DebugLogPage() {
           <ArrowLeftIcon className="w-4 h-4" />
         </Button>
         <span className="font-medium text-foreground flex-1">Debug Log ({logs.length})</span>
-        <Button size="icon" variant="ghost" title="Refresh" onClick={load}>
+        <Button size="icon" variant="ghost" title="Refresh" onClick={() => logsQuery.refetch()}>
           <RotateCwIcon />
         </Button>
         <Button size="icon" variant="ghost" title="Copy" onClick={copy}>
@@ -44,7 +40,7 @@ export function DebugLogPage() {
           <Trash2Icon />
         </Button>
       </div>
-      <pre className="flex-1 overflow-auto p-4 text-xs whitespace-pre-wrap break-all">
+      <pre className="flex-1 p-4 text-xs whitespace-pre-wrap break-all">
         {logs.length > 0 ? logs.join('\n') : 'No log entries yet.'}
       </pre>
     </div>

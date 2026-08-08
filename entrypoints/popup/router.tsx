@@ -3,6 +3,7 @@ import {
   createRoute,
   createRouter,
   createMemoryHistory,
+  redirect,
   Outlet,
   useRouterState,
 } from '@tanstack/react-router'
@@ -10,6 +11,8 @@ import { useEffect } from 'react'
 import { IndexPage } from './pages/IndexPage'
 import { DetailPage } from './pages/DetailPage'
 import { DebugLogPage } from './pages/DebugLogPage'
+import { fetchMailQuery, mailQueryKey } from '@/lib/useMailQuery'
+import { queryClient } from '@/lib/queryClient'
 
 function RootComponent() {
   // The router's own `scrollRestoration: true` option didn't actually reset
@@ -38,10 +41,43 @@ export const indexRoute = createRoute({
 
 // threadUrl is the thread's own Gmail URL, encodeURIComponent'd so it stays
 // within a single path segment (it contains its own slashes/query string).
+//
+// Checking the thread actually exists here, before DetailPage ever mounts,
+// replaces what used to be a post-render useEffect that navigated back to
+// '/' once it noticed mailQuery had resolved with no matching thread. That
+// effect fired on *any* mailQuery update while mounted, including ones that
+// landed mid-navigation (e.g. right as the 'viewed' message's notify() was
+// still propagating) - looking like the detail page flashing open and then
+// immediately bouncing back to the list. A loader runs once, synchronously
+// as part of the navigation itself, so there's no window for an in-flight
+// background update to be mistaken for "this thread doesn't exist".
+//
+// ensureQueryData (not a raw storage read) so the same data DetailPage's
+// own useMailQuery() call will read is already warm in the cache by the
+// time it first renders - see DetailRouteComponent's key below for why that
+// matters.
+function DetailRouteComponent() {
+  const { threadUrl } = detailRoute.useParams()
+  // Remounts DetailPage (and resets its local collapse state) whenever the
+  // thread changes, instead of needing an effect to sync derived state to a
+  // new messageCount on every navigation.
+  return <DetailPage key={threadUrl} />
+}
+
 export const detailRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/detail/$threadUrl',
-  component: DetailPage,
+  loader: async ({ params }) => {
+    const { threads } = await queryClient.ensureQueryData({
+      queryKey: mailQueryKey,
+      queryFn: fetchMailQuery,
+    })
+    const url = decodeURIComponent(params.threadUrl)
+    if (!threads.some((t) => t.url === url)) {
+      throw redirect({ to: '/' })
+    }
+  },
+  component: DetailRouteComponent,
 })
 
 export const debugRoute = createRoute({

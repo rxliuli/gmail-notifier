@@ -16,15 +16,21 @@ import type { EmailThread } from './StateManager'
 // instead of each call site needing to remember to pull state itself.
 export const mailQueryKey = ['mail'] as const
 
+// Exported separately from useMailQuery so the detail route's loader can
+// call queryClient.ensureQueryData(...) with this same queryFn - that way
+// mailQuery.data is already warm by the time DetailPage's first render
+// happens, instead of that render seeing an empty/loading state first.
+export async function fetchMailQuery() {
+  const { email, threads } = await browser.storage.local.get<{
+    email: string | null
+    threads: EmailThread[]
+  }>(['email', 'threads'])
+  return { email: email ?? null, threads: threads ?? [] }
+}
+
 export function useMailQuery() {
   return useQuery({
     queryKey: mailQueryKey,
-    queryFn: async () => {
-      const { email, threads } = await browser.storage.local.get<{
-        email: string | null
-        threads: EmailThread[]
-      }>(['email', 'threads'])
-      return { email: email ?? null, threads: threads ?? [] }
-    },
+    queryFn: fetchMailQuery,
   })
 }

@@ -28,7 +28,6 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { FaDiscord, FaGithub } from 'react-icons/fa'
 import type { EmailThread } from '@/lib/StateManager'
-import type { PublicPath } from 'wxt/browser'
 
 function MailItem({
   thread,
@@ -222,8 +221,13 @@ function Toolbar() {
                 extension resources live under safari-web-extension://, not
                 chrome-extension://, so that scheme opened a blank tab there
                 (the browser doesn't recognize it). getURL() returns
-                whatever scheme+id the current browser actually uses. */}
-            <a href={browser.runtime.getURL('/popup.html' as PublicPath)} target="_blank">
+                whatever scheme+id the current browser actually uses.
+
+                The ?view=tab marker is what main.tsx reads to skip applying
+                either fixed-size popup class - a standalone tab should
+                never be size-constrained the way the actual toolbar popup
+                needs to be. */}
+            <a href={browser.runtime.getURL('/popup.html?view=tab')} target="_blank">
               <SquareArrowOutUpRightIcon />
               Popout
             </a>
@@ -291,7 +295,7 @@ export function IndexPage() {
       <Toolbar />
       <div
         className={cn(
-          'flex-1 overflow-y-auto',
+          'flex-1',
           // Centering a child via h-full/100% here doesn't actually work -
           // confirmed live in DevTools that h-full resolved to 36px (its own
           // content height) instead of this element's real, DevTools-

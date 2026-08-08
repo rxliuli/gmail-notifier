@@ -124,29 +124,63 @@
   }
 }
 
+/* body scrolls directly, always - not just for Safari's fixed-height case.
+   Every page used to wrap its content in its own `flex-1 overflow-y-auto`
+   div instead. That's what originally broke Safari (a flex item needs a
+   *definite*-height ancestor for its flex-basis/grow math to actually bound
+   and clip it, confirmed live). One scroll region for every page, with
+   nothing nested, matches that fix for every browser.
+
+   NOTE: a live DevTools script confirmed html/body's own CSS-computed width
+   stays pinned at fixed-width-popup's 768px even after opening an email
+   widens the popup's actual window.innerWidth by ~16px - nothing in the DOM
+   is actually overflowing. Tried overflow-y: scroll here on the theory that
+   the scrollbar toggling on/off was triggering a native re-measurement;
+   confirmed live that made no difference at all, so that theory's wrong -
+   back to auto. Root cause of the width jump itself is still open. */
 body {
-  @apply w-2xl md:w-full min-h-96;
+  @apply min-h-96;
+  overflow-y: auto;
 }
 
-/* Safari only (class set from main.tsx via import.meta.env.SAFARI) - see
-   the comment there for the full root-cause writeup. A real height, not
-   min-height, so the popup's native window never sees content taller than
-   this and never has a reason to resize.
-
-   body scrolls directly (overflow-y: auto) rather than relying on each
-   page's own nested flex-1 scroll container. That's not just simpler, it's
-   necessary: a flex item needs a *definite*-height ancestor for its
-   flex-basis/grow math to actually bound and clip it - min-h-screen on each
-   page's wrapper is only a floor, so those nested divs were just growing to
-   fit their content instead of scrolling it, confirmed live. Document-level
-   scroll also happens to be what restores Safari's native elastic/momentum
-   physics, which nested overflow-auto divs don't get. */
+/* Safari only (class set from main.tsx via import.meta.env.SAFARI, skipped
+   for the Popout tab) - see the comment there for the full root-cause
+   writeup. A real height, not min-height, so the popup's native window
+   never sees content taller than this and never has a reason to resize.
+   Document-level scroll (see body's rule above) also happens to be what
+   restores Safari's native elastic/momentum physics, which nested
+   overflow-auto divs don't get. */
 html.safari-fixed-popup,
 html.safari-fixed-popup body {
   width: 672px;
   height: 600px;
   overflow-x: hidden;
-  overflow-y: auto;
+}
+
+/* Chrome/Firefox only (class set from main.tsx, skipped for the Popout tab)
+   - these browsers auto-size the popup correctly and don't have Safari's
+   bug cluster, but they still auto-size *horizontally* to fit content, so a
+   long unbroken subject line or email address (see the truncate classes in
+   DetailPage) can still widen the popup unexpectedly. 768px matches
+   Tailwind's `md` breakpoint.
+
+   max-height, not a hard height like Safari's: confirmed live (DevTools
+   script walking the full DOM, including inside every shadow root) that
+   nothing ever actually overflows body's own box - the width jump traces
+   back to a *tall* thread (many messages) pushing content height up near
+   Chrome/Firefox's own ~600px native popup height cap. Once past it, Chrome
+   switches to its own native clamping and reserves extra width for it as a
+   side effect - that's chrome/window-level, invisible to any DOM
+   measurement, which is why nothing ever showed up as "overflowing".
+   Capping height ourselves, safely under that native limit, means our own
+   overflow-y: auto (see body's rule above) always kicks in first - short
+   threads still size to fit exactly like before, only long ones scroll,
+   and native clamping (and whatever it does to width) never triggers. */
+html.fixed-width-popup,
+html.fixed-width-popup body {
+  width: 768px;
+  max-height: 580px;
+  overflow-x: hidden;
 }
 
 @theme {

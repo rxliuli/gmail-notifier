@@ -37,11 +37,27 @@ import { debugLog } from '@/lib/debugLog'
 // normal tab gets, not the nested-div scroll that was one of the four
 // symptoms above.
 //
-// Chrome/Firefox already auto-size correctly and don't have any of this,
-// so it's scoped to Safari only. Set as early as possible, before the
-// first paint, so Safari never sees an unpinned frame even for a moment.
-if (import.meta.env.SAFARI) {
-  document.documentElement.classList.add('safari-fixed-popup')
+// Chrome/Firefox don't have Safari's whole bug cluster from auto-resizing,
+// so the full fixed-size treatment below is scoped to Safari only. They
+// still auto-size the popup horizontally to fit content, though - a long
+// unbroken subject line or email address can widen it unexpectedly - so
+// they get a width-only fix instead. See style.css's `.safari-fixed-popup`
+// and `.fixed-width-popup` rules for the actual dimensions.
+//
+// Neither should ever apply to the "Popout" link's standalone tab (see
+// IndexPage) - a real tab has no reason to be size-constrained the way the
+// actual toolbar popup does, so that link marks itself with ?view=tab and
+// both branches below skip if it's set.
+//
+// Set as early as possible, before the first paint, so Safari never sees an
+// unpinned frame even for a moment.
+const isPopoutTab = new URLSearchParams(location.search).get('view') === 'tab'
+if (!isPopoutTab) {
+  if (import.meta.env.SAFARI) {
+    document.documentElement.classList.add('safari-fixed-popup')
+  } else {
+    document.documentElement.classList.add('fixed-width-popup')
+  }
 }
 
 const root = ReactDOM.createRoot(document.getElementById('root')!)

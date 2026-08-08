@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render } from 'vitest-browser-react'
 import { fakeBrowser } from '@webext-core/fake-browser'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider } from '@tanstack/react-router'
-import { useCollapseStore } from '@/lib/collapseStore'
+import { queryClient } from '@/lib/queryClient'
 import type { EmailThread } from '@/lib/StateManager'
 import type { ThreadMail } from '@/lib/api/gmail'
 
@@ -38,11 +38,17 @@ function makeThread(messageCount: number, overrides: Partial<EmailThread> = {}):
 // DetailPage now derives its thread from useMailQuery (storage.local) +
 // the route's $threadUrl param instead of a directly-injected store value -
 // seed storage and navigate a fresh router straight to that thread's route.
+//
+// Uses the app's real shared queryClient (not a fresh one per test): the
+// detail route's loader calls ensureQueryData against that specific
+// instance (see router.tsx), so a test-local QueryClient here would leave
+// DetailPage's own useMailQuery() reading from a different cache than the
+// one the loader just warmed - not how production is wired.
 async function renderDetail(thread: EmailThread) {
   await fakeBrowser.storage.local.set({ email: 'me@example.com', threads: [thread] })
   const router = createAppRouter([`/detail/${encodeURIComponent(thread.url)}`])
   return render(
-    <QueryClientProvider client={new QueryClient()}>
+    <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />
     </QueryClientProvider>,
   )
@@ -60,7 +66,7 @@ function renderedMessageSlots(container: HTMLElement) {
 describe('DetailPage', () => {
   beforeEach(() => {
     fakeBrowser.reset()
-    useCollapseStore.setState({ contentIndexes: new Set(), groupIndexes: new Set(), count: 0 })
+    queryClient.clear()
   })
 
   it('hides the collapse-all toggle for a single-message thread', async () => {
@@ -81,6 +87,25 @@ describe('DetailPage', () => {
     const screen = await renderDetail(makeThread(count))
     await vi.waitUntil(() => renderedMessageSlots(screen.container) > 0)
     expect(renderedMessageSlots(screen.container)).toBe(count)
+  })
+
+  it("redirects to the list instead of rendering when the thread doesn't exist", async () => {
+    // Regression test: DetailPage used to render once, then bounce back to
+    // '/' via a post-render useEffect once mailQuery resolved with no
+    // matching thread - visible as the detail page flashing open before
+    // immediately closing. The route's loader now checks this before
+    // DetailPage ever mounts, so navigating straight to a thread that isn't
+    // in storage should land on the list page without ever showing a
+    // detail-page element (back button, "Open in Gmail" link) at all.
+    await fakeBrowser.storage.local.set({ email: 'me@example.com', threads: [makeThread(1)] })
+    const router = createAppRouter([`/detail/${encodeURIComponent('https://mail.google.com/does-not-exist')}`])
+    const screen = await render(
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    )
+    await expect.element(screen.getByTitle('Refresh')).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/')
   })
 
   it('expanding the collapsed group reveals the hidden messages (count=5)', async () => {

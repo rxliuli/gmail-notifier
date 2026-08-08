@@ -1,12 +1,11 @@
-import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query'
+import { QueryClientProvider, useQueryClient } from '@tanstack/react-query'
 import { RouterProvider } from '@tanstack/react-router'
 import { Toaster } from '@/components/ui/sonner'
 import { router } from './router'
 import { bgMessager, popupMessager } from '@/lib/messager'
 import { mailQueryKey } from '@/lib/useMailQuery'
+import { queryClient } from '@/lib/queryClient'
 import { useEffectOnce } from '@/lib/utils/useEffectOnce'
-
-const queryClient = new QueryClient()
 
 function AppContent() {
   const queryClient = useQueryClient()

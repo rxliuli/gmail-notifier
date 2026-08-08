@@ -7,7 +7,7 @@ import dayjs from 'dayjs'
 import { ArrowLeftIcon, ExternalLinkIcon, PaperclipIcon, ChevronsUpDownIcon, ChevronsDownUpIcon } from 'lucide-react'
 import { memo, useEffect, useMemo } from 'react'
 import root from 'react-shadow'
-import { useCollapseStore } from '@/lib/collapseStore'
+import { useCollapseState } from '@/lib/useCollapseState'
 import { createStyleSheets } from '@/lib/addStyle'
 
 // Not importing detailRoute directly from router.tsx: that file imports
@@ -150,11 +150,11 @@ const MailMessage = function MailMessage(props: {
         {/* Sender info and summary */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between">
-            <span className="font-semibold text-foreground">{message.senderName}</span>
+            <span className="font-semibold text-foreground min-w-0 truncate">{message.senderName}</span>
             <time
               dateTime={dayjs(message.time).toISOString()}
               title={dayjs(message.time).format('YYYY-MM-DD hh:mm:ss')}
-              className="text-xs text-muted-foreground ml-2"
+              className="text-xs text-muted-foreground ml-2 shrink-0"
             >
               {dayjs(message.time).format('YYYY-MM-DD hh:mm')}
             </time>
@@ -179,11 +179,11 @@ const MailMessage = function MailMessage(props: {
         {/* Sender info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between">
-            <div>
+            <div className="min-w-0 truncate">
               <span className="font-semibold text-foreground">{message.senderName}</span>
               <span className="text-muted-foreground ml-2">&lt;{message.senderEmail}&gt;</span>
             </div>
-            <span className="text-xs text-muted-foreground whitespace-nowrap">
+            <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0 ml-2">
               {dayjs(message.time).format('YYYY-MM-DD HH:mm')}
             </span>
           </div>
@@ -222,21 +222,23 @@ export function DetailPage() {
   const mailQuery = useMailQuery()
   const thread = mailQuery.data?.threads.find((t) => t.url === decodeURIComponent(threadUrl))
 
+  // The route's loader (router.tsx) already confirmed this thread exists
+  // and warmed mailQuery's cache before this component ever mounted, so
+  // messageCount is correct from the very first render - no effect needed
+  // to push it in after the fact once thread resolves asynchronously.
+  // router.tsx also remounts this component (key={threadUrl}) on every
+  // thread change, giving each thread its own fresh collapse state for
+  // free instead of needing to sync one shared instance to a new count.
   const messageCount = thread?.messageCount ?? 0
-  const collapseStore = useCollapseStore()
-  // Not called inline in the render body: thread now arrives async (via
-  // useMailQuery, not a synchronously-set store value), so DetailPage
-  // legitimately renders once before it resolves - calling a store setter
-  // mid-render for that first, pre-thread pass triggered React's "Cannot
-  // update a component while rendering a different component" warning.
-  useEffect(() => {
-    collapseStore.setCount(messageCount)
-  }, [messageCount])
+  const collapseStore = useCollapseState(messageCount)
 
   useEffect(() => {
-    // The thread this route points at isn't in the list (e.g. archived/
-    // deleted from elsewhere, or removed on the next refresh) - once the
-    // query has actually resolved, nothing sensible is left to show here.
+    // Unlike the initial "does this thread exist" check (handled by the
+    // route loader before this component ever mounts), this reacts to the
+    // thread disappearing *while already open* - archived/deleted from
+    // elsewhere mid-view. There's no render-time equivalent for "navigate
+    // away because data I'm subscribed to changed out from under me", so
+    // this one stays an effect.
     if (mailQuery.data && !thread) {
       navigate({ to: '/' })
     }
@@ -256,7 +258,7 @@ export function DetailPage() {
         allCollapsed={collapseStore.hasCollapsed}
         onToggleAll={collapseStore.toggleAll}
       />
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1">
         <div className="w-full">
           {thread.messages.map((message, i) => {
             if (collapseStore.groupIndexes.has(i)) {
@@ -306,7 +308,7 @@ function DetailToolbar(props: {
         <ArrowLeftIcon className="w-4 h-4" />
       </Button>
       <a
-        className="font-medium text-foreground flex-1"
+        className="font-medium text-foreground flex-1 min-w-0 truncate"
         href={getOpenWebLink(thread.url)}
         title="Open in Gmail"
         onClick={(ev) => {
