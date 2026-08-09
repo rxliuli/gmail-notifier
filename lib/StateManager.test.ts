@@ -319,6 +319,39 @@ describe('StateManager', () => {
     })
   })
 
+  describe('account switching', () => {
+    it('replaces the previous account threads instead of merging them into a mixed inbox', async () => {
+      api.checkLoginStatus.mockImplementation(async () => true)
+      api.getThreadMail.mockImplementation(async () => ({ subject: 'x', messageCount: 1, messages: [], styles: [] }))
+      api.markAsRead.mockImplementation(async () => {})
+      const stateManager = new StateManager(api)
+
+      // Account A, with one thread the user has viewed - viewed threads are
+      // exactly the ones the merge filter would otherwise carry across.
+      api.getRSS.mockImplementation(
+        async () => ({ email: 'a@test.com', modified: feed.modified, feeds: [feed] }) satisfies RSSInfo,
+      )
+      await stateManager.fetchThreads()
+      await stateManager.viewed(feed.url)
+
+      // Switch to account B.
+      const bFeed: Feed = {
+        ...feed,
+        url: 'https://mail.google.com/mail/u/1?account_id=b@test.com&message_id=b111&view=conv&extsrc=atom',
+      }
+      api.getRSS.mockImplementation(
+        async () => ({ email: 'b@test.com', modified: feed.modified, feeds: [bFeed] }) satisfies RSSInfo,
+      )
+      await stateManager.fetchThreads()
+
+      expect(stateManager.email).eq('b@test.com')
+      expect(stateManager.threads.map((it) => it.url)).toEqual([bFeed.url])
+      // B's threads are unviewed and eligible for notification - A's viewed
+      // state must not leak over.
+      expect(stateManager.getUnreadThreads().map((it) => it.url)).toEqual([bFeed.url])
+    })
+  })
+
   describe('refresh', () => {
     it('clears viewed state and force-refetches all threads', async () => {
       const stateManager = new StateManager(api)

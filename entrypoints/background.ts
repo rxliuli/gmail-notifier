@@ -3,12 +3,15 @@ import {
   archiveMail,
   checkLoginStatus,
   deleteMail,
+  getActiveInboxUrl,
   getRSS,
   getThreadMail,
   markAsRead,
   markAsSpam,
   markAsUnread,
   openMailInWeb,
+  parseAccountSlot,
+  rememberActiveSlot,
   type Feed,
 } from '@/lib/api/gmail'
 import type { PublicPath } from 'wxt/browser'
@@ -189,8 +192,30 @@ async function start() {
   const WEBREQUEST_FETCH_COOLDOWN_MS = 10_000
   let lastWebRequestFetchAt = 0
   browser.webRequest.onBeforeRequest.addListener(
-    () => {
+    (details) => {
       const now = Date.now()
+      // The sync URLs themselves carry the account slot
+      // (https://mail.google.com/sync/u/1/i/s...) - a free, real-time signal
+      // for which account the user is actively using. Only pings from the
+      // *active* tab count: with two Gmail tabs on different accounts, both
+      // long-poll continuously, and without that filter they'd fight over
+      // the slot on every ping. An account switch busts the cooldown - the
+      // whole point is reflecting it right away, not up to 10s later.
+      void (async () => {
+        const slot = parseAccountSlot(details.url)
+        if (slot === null || details.tabId < 0) {
+          return
+        }
+        const tab = await browser.tabs.get(details.tabId).catch(() => null)
+        if (!tab?.active) {
+          return
+        }
+        if (await rememberActiveSlot(slot)) {
+          await debugLog('background: active Gmail account switched to slot', slot)
+          lastWebRequestFetchAt = Date.now()
+          await stateManager.fetchThreads()
+        }
+      })()
       if (now - lastWebRequestFetchAt < WEBREQUEST_FETCH_COOLDOWN_MS) {
         return {}
       }
@@ -243,7 +268,7 @@ async function start() {
   })
   browser.contextMenus.onClicked.addListener(async (info) => {
     if (info.menuItemId === 'open-gmail') {
-      await openMailInWeb('https://mail.google.com/mail/u/0/#inbox')
+      await openMailInWeb(await getActiveInboxUrl())
       return
     }
     if (info.menuItemId === 'refresh') {

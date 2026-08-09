@@ -5,6 +5,9 @@ import {
   formatDate,
   getOpenWebLink,
   getGmailAt,
+  getRSS,
+  detectActiveSlot,
+  parseAccountSlot,
   parseAddressField,
   extractGmailInfo,
   parseReplyTo,
@@ -240,5 +243,126 @@ describe('getGmailAt', () => {
     vi.stubGlobal('browser', { cookies: { get, getAllCookieStores } })
 
     expect(await getGmailAt('0')).toBeUndefined()
+  })
+})
+
+describe('parseAccountSlot', () => {
+  it('extracts the slot from mail and sync URLs alike', () => {
+    expect(parseAccountSlot('https://mail.google.com/mail/u/0/feed/atom')).eq('0')
+    expect(parseAccountSlot('https://mail.google.com/mail/u/12/?fs=1')).eq('12')
+    expect(parseAccountSlot('https://mail.google.com/sync/u/1/i/s?hl=en')).eq('1')
+    expect(parseAccountSlot('https://mail.google.com/mail/u/3')).eq('3')
+    expect(parseAccountSlot('https://mail.google.com/mail/u/1#inbox')).eq('1')
+  })
+  it('returns null when no slot is present (e.g. redirected to the login page)', () => {
+    expect(parseAccountSlot('https://accounts.google.com/ServiceLogin?service=mail')).toBeNull()
+    expect(parseAccountSlot('https://mail.google.com/mail/')).toBeNull()
+  })
+})
+
+describe('multi-account slot resolution', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  function feedXml(email: string, entries: { messageId: string; entrySlot?: string }[]) {
+    const entryXml = entries
+      .map(
+        ({ messageId, entrySlot = '0' }) =>
+          `<entry><title>t</title><summary>s</summary><link rel="alternate" href="https://mail.google.com/mail/u/${entrySlot}?account_id=${email}&amp;message_id=${messageId}&amp;view=conv&amp;extsrc=atom" type="text/html"/><modified>2025-06-03T05:42:31Z</modified><issued>2025-06-03T05:42:31Z</issued><id>tag:gmail.google.com,2004:1</id><author><name>n</name><email>a@b.com</email></author></entry>`,
+      )
+      .join('')
+    return `<?xml version="1.0" encoding="UTF-8"?><feed version="0.3" xmlns="http://purl.org/atom/ns#"><title>Gmail - Inbox for ${email}</title><tagline>New messages</tagline><fullcount>${entries.length}</fullcount><link rel="alternate" href="https://mail.google.com/mail/u/0" type="text/html"/><modified>2025-06-03T09:23:46Z</modified>${entryXml}</feed>`
+  }
+
+  function stubBrowser(options: { activeSlot?: string; tabs?: { url: string; active?: boolean; lastAccessed?: number }[] }) {
+    const data: Record<string, unknown> = options.activeSlot !== undefined ? { activeSlot: options.activeSlot } : {}
+    vi.stubGlobal('browser', {
+      storage: {
+        local: {
+          get: vi.fn(async (key: string | string[]) => {
+            const keys = Array.isArray(key) ? key : [key]
+            return Object.fromEntries(keys.map((k) => [k, data[k]]))
+          }),
+          set: vi.fn(async (obj: Record<string, unknown>) => {
+            Object.assign(data, obj)
+          }),
+        },
+      },
+      tabs: {
+        query: vi.fn(async () => options.tabs ?? []),
+      },
+    })
+    return data
+  }
+
+  function feedResponse(requestedSlot: string, servedSlot: string | null, body: string) {
+    return {
+      ok: true,
+      status: 200,
+      redirected: requestedSlot !== servedSlot,
+      url:
+        servedSlot === null
+          ? 'https://accounts.google.com/ServiceLogin?service=mail'
+          : `https://mail.google.com/mail/u/${servedSlot}/feed/atom`,
+      headers: new Headers(),
+      text: async () => body,
+    }
+  }
+
+  it('fetches the remembered slot and rewrites entry urls onto it', async () => {
+    // Confirmed live: the feed's entry links hardcode /u/0 no matter which
+    // slot served the feed - without the rewrite, actions on a non-default
+    // account would target account 0.
+    const data = stubBrowser({ activeSlot: '1' })
+    const fetchMock = vi.fn(async (url: string) =>
+      feedResponse('1', '1', feedXml('test@gmail.com', [{ messageId: 'abc', entrySlot: '0' }])),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const rss = await getRSS()
+    expect(fetchMock.mock.calls[0]![0]).toContain('/mail/u/1/feed/atom')
+    expect(rss.email).eq('test@gmail.com')
+    expect(rss.feeds[0]!.url).toContain('/u/1?account_id=')
+    expect(data['activeSlot']).eq('1')
+  })
+
+  it('falls back to slot 0 when the remembered slot has signed out', async () => {
+    // Confirmed live: requesting an out-of-range slot 302s to u/0's feed
+    // rather than erroring - resp.url is the only tell.
+    const data = stubBrowser({ activeSlot: '2' })
+    const fetchMock = vi.fn(async (url: string) => {
+      const slot = parseAccountSlot(url)!
+      return slot === '2'
+        ? feedResponse('2', '0', feedXml('primary@gmail.com', []))
+        : feedResponse('0', '0', feedXml('primary@gmail.com', [{ messageId: 'xyz' }]))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const rss = await getRSS()
+    expect(rss.email).eq('primary@gmail.com')
+    expect(fetchMock).toBeCalledTimes(2)
+    expect(data['activeSlot']).eq('0')
+  })
+
+  it('prefers the most recently active Gmail tab over the stored slot', async () => {
+    stubBrowser({
+      activeSlot: '0',
+      tabs: [
+        { url: 'https://mail.google.com/mail/u/0/#inbox', active: false, lastAccessed: 100 },
+        { url: 'https://mail.google.com/mail/u/1/#inbox', active: true, lastAccessed: 200 },
+      ],
+    })
+    expect(await detectActiveSlot()).eq('1')
+  })
+
+  it('uses the stored slot when no Gmail tab is open', async () => {
+    stubBrowser({ activeSlot: '3', tabs: [] })
+    expect(await detectActiveSlot()).eq('3')
+  })
+
+  it('defaults to slot 0 with no signal at all', async () => {
+    stubBrowser({})
+    expect(await detectActiveSlot()).eq('0')
   })
 })

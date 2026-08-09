@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button'
-import { openMailInWeb, newEmail } from '@/lib/api/gmail'
+import { openMailInWeb, newEmail, getActiveInboxUrl } from '@/lib/api/gmail'
 import { bgMessager, type GmailAction } from '@/lib/messager'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
@@ -197,7 +197,7 @@ function Toolbar() {
         size="icon"
         variant="ghost"
         title={'Open in Gmail'}
-        onClick={() => openMailInWeb('https://mail.google.com/mail/u/0/#inbox')}
+        onClick={async () => openMailInWeb(await getActiveInboxUrl())}
       >
         <ExternalLinkIcon />
       </Button>

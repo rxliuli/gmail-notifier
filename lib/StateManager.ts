@@ -117,6 +117,16 @@ export class StateManager {
       }
       const rss = await this.api.getRSS()
       await debugLog('fetchThreads: getRSS ->', { email: rss.email, feedCount: rss.feeds.length })
+      if (this.email !== null && this.email !== rss.email) {
+        // Account switch. Without this reset, the merge below would carry the
+        // previous account's threads over (its viewed threads survive the
+        // filter - their URLs just never match the new feed) and present a
+        // mixed inbox of two accounts as one list.
+        await debugLog('fetchThreads: account changed ->', rss.email)
+        this.threads = []
+        this.viewedEmails.clear()
+        this.notifiedEmails.clear()
+      }
       this.email = rss.email
       this.threads = force
         ? []

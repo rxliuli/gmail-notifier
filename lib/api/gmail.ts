@@ -76,16 +76,67 @@ export function extractRSS(text: string): RSSInfo {
   }
 }
 
-export async function getRSS(): Promise<RSSInfo> {
-  let resp: Response
-  try {
-    resp = await fetch('https://mail.google.com/mail/u/0/feed/atom?t=' + Date.now(), { credentials: 'include' })
-  } catch (err) {
-    console.error('getRSS failed', err)
-    throw err
+// Gmail assigns each signed-in account a slot in the URL path (/mail/u/0,
+// /mail/u/1, ...) by sign-in order. Everything below used to hardcode slot 0,
+// which pinned the extension to whichever account signed in first and
+// silently ignored the account the user actually switched to.
+export function parseAccountSlot(url: string): string | null {
+  return url.match(/\/u\/(\d+)([/?#]|$)/)?.[1] ?? null
+}
+
+const ACTIVE_SLOT_KEY = 'activeSlot'
+
+export async function getStoredActiveSlot(): Promise<string> {
+  const { [ACTIVE_SLOT_KEY]: slot } = await browser.storage.local.get<{ [ACTIVE_SLOT_KEY]?: string }>(ACTIVE_SLOT_KEY)
+  return slot ?? '0'
+}
+
+// Returns true when this actually changed the stored slot - background uses
+// that to trigger an immediate refetch on account switches.
+export async function rememberActiveSlot(slot: string): Promise<boolean> {
+  const prev = await getStoredActiveSlot()
+  if (prev === slot) {
+    return false
   }
+  await browser.storage.local.set({ [ACTIVE_SLOT_KEY]: slot })
+  return true
+}
+
+// Which account's inbox should the extension reflect? In order:
+// 1. The Gmail tab the user most recently had active - the clearest signal
+//    of intent, and the one that makes "I switched accounts in Gmail" just
+//    work. (On Chrome/Firefox the background's sync-ping listener usually
+//    gets there first; this covers Safari, where webRequest never fires,
+//    and the service worker having been asleep during the switch.)
+// 2. The last slot observed via either signal, persisted across restarts.
+// 3. Slot 0, Gmail's default account.
+export async function detectActiveSlot(): Promise<string> {
+  try {
+    const tabs = await browser.tabs.query({ url: 'https://mail.google.com/*' })
+    const candidates = tabs
+      .map((tab) => ({ tab, slot: tab.url ? parseAccountSlot(tab.url) : null }))
+      .filter((it): it is { tab: (typeof tabs)[number]; slot: string } => it.slot !== null)
+    if (candidates.length > 0) {
+      // lastAccessed is missing on some browsers - fall back to preferring
+      // the active tab. Consistent within any one browser, which is all the
+      // comparison needs.
+      const score = (tab: (typeof tabs)[number]) => tab.lastAccessed ?? (tab.active ? 1 : 0)
+      candidates.sort((a, b) => score(b.tab) - score(a.tab))
+      return candidates[0]!.slot
+    }
+  } catch (err) {
+    await debugLog('detectActiveSlot: tabs query failed ->', err)
+  }
+  return getStoredActiveSlot()
+}
+
+async function fetchFeedForSlot(slot: string): Promise<RSSInfo | null> {
+  const resp = await fetch(`https://mail.google.com/mail/u/${slot}/feed/atom?t=` + Date.now(), {
+    credentials: 'include',
+  })
   const text = await resp.text()
   await debugLog('getRSS: response ->', {
+    slot,
     status: resp.status,
     ok: resp.ok,
     contentType: resp.headers.get('content-type'),
@@ -93,7 +144,52 @@ export async function getRSS(): Promise<RSSInfo> {
     url: resp.url,
     bodyPreview: text.slice(0, 300),
   })
-  return extractRSS(text)
+  // An out-of-range slot doesn't 404 or bounce to the login page - confirmed
+  // live, Gmail 302s it straight to u/0's feed (and a fully signed-out
+  // session 302s to accounts.google.com). Either way resp.url no longer
+  // carries the slot we asked for, which is the only reliable tell.
+  if (!resp.ok || parseAccountSlot(resp.url) !== slot) {
+    return null
+  }
+  const rss = extractRSS(text)
+  return {
+    ...rss,
+    // Rewrite each entry's slot to the one that actually served this feed.
+    // Confirmed live: the feed's entry links hardcode /u/0 no matter which
+    // slot was fetched, and everything downstream - thread detail fetches,
+    // archive/read/delete actions (their at/ik tokens), open-in-web links -
+    // derives its slot from the thread URL. Without this rewrite, every
+    // action on a non-default account would run against account 0.
+    feeds: rss.feeds.map((feed) => ({
+      ...feed,
+      url: feed.url.replace(/\/u\/\d+/, `/u/${slot}`),
+    })),
+  }
+}
+
+export async function getRSS(): Promise<RSSInfo> {
+  let slot = await detectActiveSlot()
+  let rss: RSSInfo | null
+  try {
+    rss = await fetchFeedForSlot(slot)
+  } catch (err) {
+    console.error('getRSS failed', err)
+    throw err
+  }
+  // The preferred slot can go stale (that account signed out, slots
+  // reshuffled). Slot 0 is the only meaningful blind fallback: Gmail
+  // guarantees the default account occupies it whenever anyone is signed in
+  // at all, so anything beyond 0 can only ever be reached via a real signal
+  // (tab URL / sync ping), never by scanning.
+  if (!rss && slot !== '0') {
+    slot = '0'
+    rss = await fetchFeedForSlot(slot)
+  }
+  if (!rss) {
+    throw new Error('getRSS: no signed-in Gmail account responded')
+  }
+  await rememberActiveSlot(slot)
+  return rss
 }
 
 interface Attachment {
@@ -297,9 +393,18 @@ export async function getGmailAt(n: string) {
   return getCookie('GMAIL_AT', `https://mail.google.com/mail/u/${n}`)
 }
 
-// Check login status
+// "Logged in" means any signed-in account, not specifically slot 0's -
+// GMAIL_AT is path-scoped per slot (/mail/u/{n}), so probe each. Slots are
+// assigned contiguously but sign-outs can leave gaps in the cookies, so scan
+// a fixed small range rather than stopping at the first miss.
+const MAX_ACCOUNT_SLOTS = 10
 export async function checkLoginStatus() {
-  return !!(await getGmailAt('0'))
+  for (let i = 0; i < MAX_ACCOUNT_SLOTS; i++) {
+    if (await getGmailAt(String(i))) {
+      return true
+    }
+  }
+  return false
 }
 
 export function extractGmailInfo(url: string) {
@@ -501,12 +606,23 @@ export function getOpenWebLink(url: string) {
 export async function openMailInWeb(url: string) {
   const openWebLink = getOpenWebLink(url)
   const tabs = await browser.tabs.query({ url: 'https://mail.google.com/*' })
-  if (tabs.length === 0) {
+  // Prefer a tab already on the same account slot - reusing whichever Gmail
+  // tab happens to be first would hijack a different account's tab when
+  // several are signed in. No same-slot tab -> a fresh one, not a takeover.
+  const slot = parseAccountSlot(openWebLink)
+  const target = slot === null ? tabs[0] : tabs.find((tab) => tab.url && parseAccountSlot(tab.url) === slot)
+  if (!target) {
     await browser.tabs.create({ url: openWebLink })
     return
   }
-  await browser.tabs.update(tabs[0]!.id!, { url: openWebLink, active: true })
-  await browser.windows.update(tabs[0]!.windowId!, { focused: true })
+  await browser.tabs.update(target.id!, { url: openWebLink, active: true })
+  await browser.windows.update(target.windowId!, { focused: true })
+}
+
+// The inbox of whichever account the extension is currently showing - i.e.
+// the slot getRSS last fetched successfully.
+export async function getActiveInboxUrl() {
+  return `https://mail.google.com/mail/u/${await getStoredActiveSlot()}/#inbox`
 }
 
 export async function newEmail() {
@@ -523,7 +639,7 @@ export async function newEmail() {
   }
 
   await browser.windows.create({
-    url: 'https://mail.google.com/mail/u/0/?fs=1&tf=cm',
+    url: `https://mail.google.com/mail/u/${await getStoredActiveSlot()}/?fs=1&tf=cm`,
     type: 'popup',
     width: windowWidth,
     height: windowHeight,
