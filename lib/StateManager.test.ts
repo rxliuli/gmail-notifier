@@ -352,6 +352,73 @@ describe('StateManager', () => {
     })
   })
 
+  describe('concurrent actions during an in-flight fetch', () => {
+    async function seedOneThread(stateManager: StateManager) {
+      api.checkLoginStatus.mockImplementation(async () => true)
+      api.getRSS.mockImplementation(
+        async () => ({ email: 'test@test.com', modified: feed.modified, feeds: [feed] }) satisfies RSSInfo,
+      )
+      api.getThreadMail.mockImplementation(async () => ({ subject: 'x', messageCount: 1, messages: [], styles: [] }))
+      await stateManager.fetchThreads()
+    }
+
+    // Puts the next fetchThreads into its slow getThreadMail phase and hands
+    // back the trigger that lets it finish - the window where a concurrent
+    // action's notify() used to catch this.threads mid-rebuild.
+    function stallThreadDetails() {
+      let release!: () => void
+      api.getThreadMail.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            release = () => resolve({ subject: 'x', messageCount: 1, messages: [], styles: [] })
+          }),
+      )
+      return () => release()
+    }
+
+    it('viewed() during a force refresh persists the previous list, not a half-built empty one', async () => {
+      // Regression test for the click-bounces-back-to-the-list bug: opening
+      // the popup fires a force refresh; clicking a mail during its
+      // getThreadMail phase fires viewed(), whose notify() persisted the
+      // transient `threads = []` to storage. The popup re-read that empty
+      // list on the refreshPopup push and DetailPage's "thread disappeared"
+      // effect kicked the just-opened detail view straight back.
+      const stateManager = new StateManager(api)
+      await seedOneThread(stateManager)
+      api.markAsRead.mockImplementation(async () => {})
+
+      const releaseDetails = stallThreadDetails()
+      const refreshing = stateManager.refresh()
+      await vi.waitFor(() => expect(api.getThreadMail).toBeCalledTimes(2))
+
+      await stateManager.viewed(feed.url)
+      const { threads } = await browser.storage.local.get<{ threads: Feed[] }>('threads')
+      expect(threads.map((it) => it.url)).toEqual([feed.url])
+
+      releaseDetails()
+      await refreshing
+      expect(stateManager.threads.map((it) => it.url)).toEqual([feed.url])
+    })
+
+    it('does not resurrect a thread removed while the fetch was in flight', async () => {
+      const stateManager = new StateManager(api)
+      await seedOneThread(stateManager)
+      api.markAsRead.mockImplementation(async () => {})
+
+      const releaseDetails = stallThreadDetails()
+      const refreshing = stateManager.refresh()
+      await vi.waitFor(() => expect(api.getThreadMail).toBeCalledTimes(2))
+
+      // Removed it while the refetch was still assembling its new list - the
+      // RSS response that fetch is working from predates the removal.
+      await stateManager.markAsRead(feed.url)
+
+      releaseDetails()
+      await refreshing
+      expect(stateManager.threads).toEqual([])
+    })
+  })
+
   describe('refresh', () => {
     it('clears viewed state and force-refetches all threads', async () => {
       const stateManager = new StateManager(api)

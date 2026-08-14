@@ -128,16 +128,25 @@ export class StateManager {
         this.notifiedEmails.clear()
       }
       this.email = rss.email
-      this.threads = force
+      // Assembled in locals and written to this.threads only once complete:
+      // the getThreadMail() calls below take hundreds of ms, and any action
+      // arriving in that window calls notify(), which persists this.threads
+      // to storage.local as-is. Assigning the half-built state up front made
+      // a force refresh's persisted state a transient EMPTY list - viewed()
+      // (fired by every mail click) wrote it out, the popup re-rendered with
+      // zero threads, and DetailPage's "thread disappeared" effect bounced
+      // the just-opened detail view straight back to the list.
+      const threadsBefore = this.threads
+      const keptThreads = force
         ? []
-        : this.threads.filter(
+        : threadsBefore.filter(
             (t) =>
               // Keep read emails
               this.viewedEmails.has(t.url) ||
               // Keep unchanged emails
               rss.feeds.find((it) => it.url === t.url)?.modified === t.modified,
           )
-      const newFeeds = rss.feeds.filter((it) => !this.threads.find((t) => t.url === it.url))
+      const newFeeds = rss.feeds.filter((it) => !keptThreads.find((t) => t.url === it.url))
       const newThreads = await Promise.all(
         newFeeds.map(async (it) => {
           const details = await this.api.getThreadMail(it.url)
@@ -147,9 +156,16 @@ export class StateManager {
           } satisfies EmailThread
         }),
       )
-      this.threads = uniqBy([...this.threads, ...newThreads], (it) => it.url).sort((a, b) =>
-        b.modified.localeCompare(a.modified),
-      )
+      // Actions that landed while the detail fetches were in flight
+      // (markAsRead, archive, delete, clearViewed on popup close) filtered
+      // this.threads immediately - don't resurrect what they removed, neither
+      // from the pre-fetch snapshot nor from an RSS response that may predate
+      // the action.
+      const currentUrls = new Set(this.threads.map((t) => t.url))
+      const removedUrls = new Set(threadsBefore.filter((t) => !currentUrls.has(t.url)).map((t) => t.url))
+      this.threads = uniqBy([...keptThreads, ...newThreads], (it) => it.url)
+        .filter((t) => !removedUrls.has(t.url))
+        .sort((a, b) => b.modified.localeCompare(a.modified))
       await debugLog('fetchThreads: done ->', this.threads.length, 'threads')
       // Not fire-and-forget: this used to be an unawaited call, which meant
       // a rejection here (e.g. the storage write failing) became a silent
