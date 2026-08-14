@@ -17,6 +17,7 @@ import {
   BugIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { debugLog } from '@/lib/debugLog'
 import { RefreshIcon } from '@/components/extra/RefreshIcon'
 import { toast } from 'sonner'
 import {
@@ -281,6 +282,11 @@ export function IndexPage() {
   const mailQuery = useMailQuery()
 
   async function onSelectFeed(thread: EmailThread) {
+    // Diagnostic for the click-kills-the-popup bug: timestamps the click and
+    // identifies which thread was clicked, so a teardown moments later can be
+    // matched to the exact email (still retrievable in Gmail - it only got
+    // marked read, not deleted).
+    void debugLog('popup: mail clicked ->', thread.url)
     navigate({ to: '/detail/$threadUrl', params: { threadUrl: encodeURIComponent(thread.url) } })
     if (import.meta.env.PROD) {
       await bgMessager.sendMessage('gmailAction', {

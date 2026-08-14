@@ -52,6 +52,35 @@ import { debugLog } from '@/lib/debugLog'
 // Set as early as possible, before the first paint, so Safari never sees an
 // unpinned frame even for a moment.
 const isPopoutTab = new URLSearchParams(location.search).get('view') === 'tab'
+
+// Diagnostic for the click-kills-the-popup bug: the background log showed the
+// popup page being torn down at the instant a mail row is clicked (port
+// disconnect, then a brand-new page connecting ~0.5s later and sending its
+// once-per-session refreshThreads). The navigation entry's type tells the two
+// candidate causes apart from inside the *new* page: 'reload' means the old
+// page reloaded itself via location.reload(), while 'navigate' covers both a
+// real (same-URL) navigation and the popup view being destroyed and recreated
+// from scratch (renderer death) - observed value so far is always 'navigate',
+// so the beacon below is what tells those last two apart.
+//
+// The pagehide beacon: a graceful teardown (normal close, real navigation)
+// fires pagehide; a renderer crash does not. A single storage.local.set with
+// no prior read, because a read-modify-write (what debugLog does) has two
+// async hops and loses the race against the document being destroyed. The
+// next page load reports the previous beacon - if the popup died at a click
+// but the beacon's timestamp is from an older, normal close, the death was
+// not graceful.
+window.addEventListener('pagehide', () => {
+  void browser.storage.local.set({ lastPagehide: new Date().toISOString() })
+})
+void (async () => {
+  const { lastPagehide } = await browser.storage.local.get<{ lastPagehide?: string }>('lastPagehide')
+  await debugLog('popup: page loaded ->', {
+    navType: (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)?.type,
+    view: isPopoutTab ? 'tab' : 'popup',
+    prevPagehide: lastPagehide ?? null,
+  })
+})()
 if (!isPopoutTab) {
   if (import.meta.env.SAFARI) {
     document.documentElement.classList.add('safari-fixed-popup')

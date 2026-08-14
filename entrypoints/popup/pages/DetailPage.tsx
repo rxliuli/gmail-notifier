@@ -9,6 +9,7 @@ import { memo, useEffect, useMemo } from 'react'
 import root from 'react-shadow'
 import { useCollapseState } from '@/lib/useCollapseState'
 import { createStyleSheets } from '@/lib/addStyle'
+import { debugLog } from '@/lib/debugLog'
 
 // Not importing detailRoute directly from router.tsx: that file imports
 // this one (as the route's component), so a direct import would be
@@ -231,6 +232,15 @@ export function DetailPage() {
   // free instead of needing to sync one shared instance to a new count.
   const messageCount = thread?.messageCount ?? 0
   const collapseStore = useCollapseState(messageCount)
+
+  // Diagnostic for the click-kills-the-popup bug: fires after the first
+  // commit, i.e. once the email's HTML is actually in the document. If a
+  // teardown follows a 'mail clicked' log WITHOUT this line, the page died
+  // before the mail content ever rendered - ruling out every "something in
+  // the email HTML triggered it" theory for that repro.
+  useEffect(() => {
+    void debugLog('popup: detail mounted ->', threadUrl)
+  }, [threadUrl])
 
   useEffect(() => {
     // Unlike the initial "does this thread exist" check (handled by the
