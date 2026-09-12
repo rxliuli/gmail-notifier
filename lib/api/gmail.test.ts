@@ -109,6 +109,36 @@ describe('extractContent', () => {
     expect(img.src).include('https://mail.google.com/mail/u/0')
   })
   it.todo('attachment')
+  it('re-declares background images for the dark-mode filter', async () => {
+    // Background images get no reverse filter of their own (the shadow CSS can
+    // only reach img/video), so extractThreadMail hands them to the stylesheet
+    // as custom properties on a marker attribute - see lib/emailBackground.ts.
+    const content = (await import('./assets/content-background.html?raw')).default
+    const mail = extractThreadMail(content)
+    const doc = new DOMParser().parseFromString(mail.messages[0]!.contentHtml, 'text/html')
+
+    const cover = doc.querySelector('td[background]') as HTMLElement
+    expect(cover.getAttribute('data-email-bg')).toBe('image')
+    expect(cover.style.getPropertyValue('--email-bg-image')).toBe(
+      'url("https://ci3.googleusercontent.com/meips/cover=s0-d-e1-ft#https://i.pinimg.com/400x300/ff/9c/e5/ff9ce53887d76b1b072701cbbb6168bc.jpg")',
+    )
+    expect(cover.style.getPropertyValue('--email-bg-size')).toBe('cover')
+    expect(cover.style.getPropertyValue('--email-bg-position')).toBe('center')
+    expect(cover.style.getPropertyValue('--email-bg-repeat')).toBe('no-repeat')
+    // Light mode still paints from the attribute itself.
+    expect(cover.getAttribute('background')).toContain('i.pinimg.com/400x300')
+
+    const banner = doc.querySelector('[data-email-bg="shorthand"]') as HTMLElement
+    expect(banner.style.getPropertyValue('--email-bg-shorthand')).toBe('#111111 url("https://i.pinimg.com/banner.jpg") no-repeat center/cover')
+
+    const hero = doc.querySelector('div[data-email-bg="image"]:not([background])') as HTMLElement
+    expect(hero.style.getPropertyValue('--email-bg-image')).toBe('url(https://i.pinimg.com/hero.jpg)')
+    expect(hero.style.getPropertyValue('--email-bg-size')).toBe('contain')
+
+    // The real <img> tiles next to them are untouched: they are already
+    // compensated by the `img, video` rule.
+    expect(doc.querySelector('img')!.hasAttribute('data-email-bg')).toBe(false)
+  })
   it('reply', async () => {
     const content = (await import('./assets/content-reply.html?raw')).default
     const mail = extractThreadMail(content, 'https://mail.google.com/mail/u/0')

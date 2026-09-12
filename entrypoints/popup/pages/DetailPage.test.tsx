@@ -4,6 +4,8 @@ import { fakeBrowser } from '@webext-core/fake-browser'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider } from '@tanstack/react-router'
 import { queryClient } from '@/lib/queryClient'
+import { createStyleSheets } from '@/lib/addStyle'
+import { DARK_MODE_RULES } from './DetailPage'
 import type { EmailThread } from '@/lib/StateManager'
 import type { ThreadMail } from '@/lib/api/gmail'
 
@@ -163,6 +165,43 @@ describe('DetailPage', () => {
       await vi.waitUntil(() => host.shadowRoot!.querySelector('p') !== null)
       const unstyledText = host.shadowRoot!.querySelector('p')!
       expect(getComputedStyle(unstyledText).color).toBe('rgb(0, 0, 0)')
+    })
+
+    // Background images cannot be compensated the way img/video are (a
+    // background is painted by the element itself, there is no second element
+    // to hang the reverse filter on), so lib/emailBackground.ts re-declares
+    // them as custom properties and these rules repaint them on an ::before
+    // layer. Applied directly instead of through the media query, which a
+    // browser test cannot switch on.
+    it('repaints a lifted background image on a compensated layer', () => {
+      const host = document.createElement('div')
+      document.body.appendChild(host)
+      try {
+        const shadow = host.attachShadow({ mode: 'open' })
+        shadow.adoptedStyleSheets = createStyleSheets([DARK_MODE_RULES])
+        const el = document.createElement('div')
+        el.setAttribute('data-email-bg', 'image')
+        el.setAttribute('style', 'background-image: url(https://i.pinimg.com/cover.jpg); background-size: cover; --email-bg-image: url(https://i.pinimg.com/cover.jpg); --email-bg-size: cover; width: 120px; height: 120px')
+        shadow.appendChild(el)
+
+        // The element's own (fully inverted) copy of the image is hidden...
+        expect(getComputedStyle(el).backgroundImage).toBe('none')
+        // ...and the layer that replaces it carries the reverse filter, so it
+        // cancels the host's invert instead of being inverted by it.
+        const layer = getComputedStyle(el, '::before')
+        expect(layer.filter).toContain('invert(1)')
+        expect(layer.backgroundImage).toContain('i.pinimg.com/cover.jpg')
+        expect(layer.backgroundSize).toBe('cover')
+        // Behind the cell's own content, above its background.
+        expect(layer.zIndex).toBe('-1')
+        expect(parseFloat(layer.top)).toBe(0)
+        // Containing block + stacking context, otherwise z-index: -1 would
+        // paint behind the email's own white body background.
+        expect(getComputedStyle(el).position).toBe('relative')
+        expect(getComputedStyle(el).isolation).toBe('isolate')
+      } finally {
+        host.remove()
+      }
     })
   })
 })

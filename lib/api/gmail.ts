@@ -14,6 +14,7 @@ import {
 } from '../domutils'
 import { decodeHTML } from 'entities'
 import { debugLog } from '../debugLog'
+import { liftBackgroundImages } from '../emailBackground'
 
 dayjs.extend(customParseFormat)
 
@@ -316,6 +317,10 @@ export function extractThreadMail(text: string, baseUrl?: string): ThreadMail {
           attachments.push({ fileName, url })
         }
       })
+      // Background images have no element of their own for the dark-mode filter to
+      // un-invert (see liftBackgroundImages), so re-declare them where it can.
+      liftBackgroundImages(contentDiv)
+
       const images = [...querySelectorAll('img[src]', contentDiv)]
       images.forEach((img) => {
         if (getAttribute(img, 'height') === '1' && getAttribute(img, 'width') === '1') {

@@ -68,14 +68,15 @@ const DARK_MODE_BRIGHTNESS = 1.5
 // Wrapped in the media query itself rather than picked in JS - the whole
 // point of moving off next-themes is that dark mode is now purely a system
 // preference the browser applies on its own, so this rule only needs to be
-// present in the stylesheet, never conditionally included.
-const DARK_MODE_FILTER_STYLE = `
-  @media (prefers-color-scheme: dark) {
+// present in the stylesheet, never conditionally included. The rules are kept
+// in their own exported constant so a test can apply them without the media
+// query wrapper (a browser test cannot switch prefers-color-scheme on demand).
+export const DARK_MODE_RULES = `
     :host {
       filter: invert(1) hue-rotate(180deg) brightness(${DARK_MODE_BRIGHTNESS});
       background: white;
     }
-    img, video {
+    img, video, [data-email-bg]::before {
       /* Order matters here, and it's the opposite of what's intuitive: the
          brightness cancellation has to run BEFORE invert/hue-rotate, not
          after. brightness() is a plain per-channel multiply (no pivot,
@@ -91,7 +92,61 @@ const DARK_MODE_FILTER_STYLE = `
          logos render at their original brightness. */
       filter: brightness(${1 / DARK_MODE_BRIGHTNESS}) invert(1) hue-rotate(180deg);
     }
-  }
+    /* Background images (legacy background= attributes, inline
+       background-image / background shorthands - see liftBackgroundImages)
+       are painted by the element itself, so the img/video rule above can
+       never reach them: they used to stay fully inverted, showing up as
+       photographic negatives with the hue spun 180 degrees. Pinterest's
+       board mails are the worst offender, because their big collage tiles
+       are td[background] while only the small ones are real img elements.
+
+       lib/emailBackground.ts re-declares those images as custom properties
+       (keeping the original declaration too, so light mode is untouched),
+       and here we repaint them on an ::before layer of their own - the one
+       layer we can hang the compensation filter on.
+
+       A pseudo-element rather than an injected div: raw email CSS (which we
+       do not control) targets div/td children freely and would happily
+       restyle or hide a child of ours, while ::before is only reachable by
+       rules that explicitly ask for it. */
+    [data-email-bg] {
+      /* The element's own copy of the image has to go, or it would still be
+         drawn (inverted) underneath the compensated layer. Only
+         background-image is cleared, so a background-color the same
+         declaration set stays where it was. */
+      background-image: none !important;
+      /* Containing block + stacking context for the layer. Without the
+         stacking context the layer's z-index: -1 would paint behind the
+         email's own (white) body background and vanish. Both only apply in
+         dark mode, so light mode keeps the exact layout it had before. */
+      position: relative;
+      isolation: isolate;
+    }
+    [data-email-bg]::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      /* Behind the cell's own content, but above its background. */
+      z-index: -1;
+      border-radius: inherit;
+    }
+    [data-email-bg='image']::before {
+      background-image: var(--email-bg-image, none);
+      background-size: var(--email-bg-size, auto);
+      background-position: var(--email-bg-position, 0% 0%);
+      background-repeat: var(--email-bg-repeat, repeat);
+    }
+    [data-email-bg='shorthand']::before {
+      background: var(--email-bg-shorthand, none);
+    }
+`
+
+const DARK_MODE_FILTER_STYLE = `
+  @media (prefers-color-scheme: dark) {
+${DARK_MODE_RULES}  }
 `
 
 const MailContent = memo((props: { contentHtml: string; styles: string[] }) => {
