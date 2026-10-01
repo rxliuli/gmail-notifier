@@ -70,6 +70,10 @@ export default defineConfig({
     }
     if (env.browser === 'safari') {
       manifest.name = 'Inbox Notifier for Gmail'
+      // Safari caps storage.local at 5MB (in practice it failed at ~330KB), and
+      // once over quota every set() is rejected, wedging the extension.
+      // unlimitedStorage lifts the cap on Safari 16+.
+      manifest.permissions!.push('unlimitedStorage')
     }
     return manifest
   },
