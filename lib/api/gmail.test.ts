@@ -16,6 +16,7 @@ import {
 } from './gmail'
 import { parseDocument, parseFeed } from 'htmlparser2'
 import { selectOne } from 'css-select'
+import { hasBoardImage } from '../emailBackground'
 
 describe('extractRSS', () => {
   it('empty', () => {
@@ -138,6 +139,55 @@ describe('extractContent', () => {
     // The real <img> tiles next to them are untouched: they are already
     // compensated by the `img, video` rule.
     expect(doc.querySelector('img')!.hasAttribute('data-email-bg')).toBe(false)
+
+    // Picture-only tiles are not "design boards", so this mail is still a dark
+    // mode one (the fixture's own banner happens to carry a caption - see the
+    // board test below for both directions of that judgement).
+    expect(doc.querySelector('td[background]')!.hasAttribute('data-email-board')).toBe(false)
+  })
+  it('marks a message whose copy sits on a background board, so dark mode leaves it alone', () => {
+    // A board mail is one background image that *is* the layout, with the copy
+    // laid out on top of it - see isBoard in lib/emailBackground.ts for why
+    // inverting that is unwinnable (the copy ends up the colour of the board).
+    // The marker has to survive the parse5 round-trip this test exercises:
+    // extractThreadMail serialises the body and the popup only ever sees the
+    // resulting string.
+    const copy = '尊敬的客户，截至昨日最后一笔交易，您的额度和积分信息如下：'
+    const content = `<!DOCTYPE html><html><head><title>Gmail - Test Board</title></head><body>
+      <table width="100%" border="0" class="message">
+        <tr><td><font size="-1"><b>招商银行 </b>&lt;ccsvc@message.cmbchina.com&gt;</font></td>
+            <td align="right"><font size="-1">Tue, Jun 3, 2025 at 2:51 PM</font></td></tr>
+        <tr><td colspan="2"><div style="overflow: hidden">
+          <table width="660" height="950" background="https://ci3.googleusercontent.com/meips/board.png">
+            <tr><td><div style="color: rgb(64, 64, 64)"><font size="-1">${copy}</font></div></td></tr>
+          </table>
+        </div></td></tr>
+      </table></body></html>`
+    const mail = extractThreadMail(content)
+    const html = mail.messages[0]!.contentHtml
+
+    expect(hasBoardImage(html)).toBe(true)
+    const doc = new DOMParser().parseFromString(html, 'text/html')
+    expect(doc.querySelector('table')!.hasAttribute('data-email-board')).toBe(true)
+    // Light mode is still handled by the browser from the original attribute.
+    expect(html).toContain('background="https://ci3.googleusercontent.com/meips/board.png"')
+  })
+  it('does not treat a picture-only background tile as a design board', () => {
+    // The other half of the judgement: Pinterest-style collage tiles are painted
+    // with an image but carry no copy, so compensating them is correct and the
+    // message keeps its dark mode.
+    const content = `<!DOCTYPE html><html><head><title>Gmail - Test Collage</title></head><body>
+      <table width="100%" border="0" class="message">
+        <tr><td><font size="-1"><b>Pinterest </b>&lt;recommendations@inspire.pinterest.com&gt;</font></td>
+            <td align="right"><font size="-1">Tue, Jun 3, 2025 at 3:13 PM</font></td></tr>
+        <tr><td colspan="2"><div style="overflow: hidden">
+          <table><tr><td background="https://i.pinimg.com/400x300/cover.jpg" style="background-size:cover">
+            <a href="#"><div style="height:241px;width:241px"> </div></a>
+          </td></tr></table>
+        </div></td></tr>
+      </table></body></html>`
+    const mail = extractThreadMail(content)
+    expect(hasBoardImage(mail.messages[0]!.contentHtml)).toBe(false)
   })
   it('reply', async () => {
     const content = (await import('./assets/content-reply.html?raw')).default

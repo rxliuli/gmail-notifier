@@ -9,6 +9,7 @@ import { memo, useEffect, useMemo } from 'react'
 import root from 'react-shadow'
 import { useCollapseState } from '@/lib/useCollapseState'
 import { createStyleSheets } from '@/lib/addStyle'
+import { hasBoardImage } from '@/lib/emailBackground'
 import { debugLog } from '@/lib/debugLog'
 
 // Not importing detailRoute directly from router.tsx: that file imports
@@ -149,10 +150,26 @@ const DARK_MODE_FILTER_STYLE = `
 ${DARK_MODE_RULES}  }
 `
 
+// Messages that are not "a document with a background" but "a background image
+// with a document on top" cannot be darkened by inverting them: the board's
+// copy is inverted (to white) while the board itself is compensated back to its
+// original (light) colours, so the text ends up the same colour as the pixels
+// underneath it and the message renders blank. See lib/emailBackground.ts' isBoard
+// for the measurements and for why neither half-inverted mix works.
+//
+// Such a message is therefore rendered as-is: no invert filter, original
+// colours, original contrast. It stays light inside our dark chrome, which is
+// exactly what mobile Gmail's dark mode and Dark Reader do with the same mail
+// (and both still downgrade the copy to ~2.2:1 by lifting its colour, where
+// leaving it alone keeps the sender's own 9.7:1).
+function darkModeStyleSources(contentHtml: string): string[] {
+  return hasBoardImage(contentHtml) ? [] : [DARK_MODE_FILTER_STYLE]
+}
+
 const MailContent = memo((props: { contentHtml: string; styles: string[] }) => {
   const styleSheets = useMemo(() => {
-    return createStyleSheets([BASE_RESET_STYLE, ...props.styles, DARK_MODE_FILTER_STYLE])
-  }, [props.styles])
+    return createStyleSheets([BASE_RESET_STYLE, ...props.styles, ...darkModeStyleSources(props.contentHtml)])
+  }, [props.styles, props.contentHtml])
   return (
     <ShadowDiv styleSheets={styleSheets}>
       <div dangerouslySetInnerHTML={{ __html: props.contentHtml }} style={{ overflowX: 'auto' }} />

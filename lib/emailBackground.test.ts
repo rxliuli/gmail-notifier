@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { parse } from 'parse5'
 import { getAttribute, getInnerHTML, querySelector, querySelectorAll } from './domutils'
-import { EMAIL_BG_ATTR, liftBackgroundImages, splitDeclarations } from './emailBackground'
+import {
+  EMAIL_BG_ATTR,
+  EMAIL_BOARD_ATTR,
+  hasBoardImage,
+  liftBackgroundImages,
+  splitDeclarations,
+} from './emailBackground'
 
 // Lifts every background image in `html` and returns the serialized result,
 // which is what the dark-mode stylesheet ends up seeing.
@@ -111,6 +117,61 @@ describe('liftBackgroundImages', () => {
   it('counts every lifted element', () => {
     const doc = parse('<table><tr><td background="https://i.pinimg.com/a.jpg"></td></tr></table><div style="background-image:url(b.jpg)"></div><span>x</span>')
     expect(liftBackgroundImages(doc)).eq(2)
+  })
+
+  // A board is a background image that *is* the layout, with the copy on top of
+  // it - as opposed to a tile/button that happens to be painted with an image.
+  // The dark-mode stylesheet has to treat the first kind as "hands off", and
+  // this attribute is what carries that decision from here (where the DOM is)
+  // to the popup (which only gets a string of HTML).
+  describe('design boards', () => {
+    const COPY = '尊敬的客户，截至昨日最后一笔交易，您的额度和积分信息如下：'
+
+    it('marks a background image that carries the message copy', () => {
+      const html = lifted(`<table background="https://ci3.googleusercontent.com/board.png"><tr><td>${COPY}</td></tr></table>`)
+      const table = querySelector('table', parse(html))!
+      expect(getAttribute(table, EMAIL_BOARD_ATTR)).eq('')
+      expect(hasBoardImage(html)).toBe(true)
+    })
+
+    it('counts copy nested several tables deep', () => {
+      const deep = `<table background="https://ci3.googleusercontent.com/board.png"><tr><td><table><tr><td><div><font>${COPY}</font></div></td></tr></table></td></tr></table>`
+      expect(hasBoardImage(lifted(deep))).toBe(true)
+    })
+
+    it('ignores whitespace-only text, e.g. a spacer cell painted with an image', () => {
+      const spacer = '<table background="https://i.pinimg.com/board.jpg"><tr><td><font>&nbsp;</font></td></tr></table>'
+      expect(hasBoardImage(lifted(spacer))).toBe(false)
+    })
+
+    it('ignores a <style> block carrying CSS, however long', () => {
+      // Emails do ship <style> inside the body. Its contents are source code,
+      // not copy, and counting them would flag a mail as a board for nothing.
+      const withStyle = `<table background="https://i.pinimg.com/tile.jpg"><tr><td><style>.a{font-family:arial,sans-serif;color:#333333;margin:0 auto}</style><font>&nbsp;</font></td></tr></table>`
+      expect(hasBoardImage(lifted(withStyle))).toBe(false)
+    })
+
+    it('does not mistake a picture-only tile for a board', () => {
+      const html = lifted(PINTEREST_TILE)
+      expect(querySelectorAll(`[${EMAIL_BOARD_ATTR}]`, parse(html))).length(0)
+      expect(hasBoardImage(html)).toBe(false)
+    })
+
+    it('does not mistake a background-image button for a board', () => {
+      // 5 characters of label on a bg image: lifting it stays "compensate the
+      // artwork", the message keeps its dark mode.
+      const button = '<a href="#" style="background-image: url(https://i.pinimg.com/btn.png)">立即享权益</a>'
+      const html = lifted(button)
+      expect(getAttribute(querySelector('a', parse(html)), EMAIL_BG_ATTR)).eq('image')
+      expect(hasBoardImage(html)).toBe(false)
+    })
+
+    it('does not mistake a long CTA label for a board', () => {
+      // 13 characters - the longest CTA copy that is still clearly a button,
+      // and the reason BOARD_TEXT_MIN does not go below this.
+      const cta = '<a href="#" style="background-image: url(https://i.pinimg.com/btn.png)">点击领取 50 元还款金</a>'
+      expect(hasBoardImage(lifted(cta))).toBe(false)
+    })
   })
 
   describe('rendering', () => {

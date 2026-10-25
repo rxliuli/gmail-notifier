@@ -147,6 +147,44 @@ describe('DetailPage', () => {
       expect(mediaRule.cssText).toContain('invert(1)')
     })
 
+    it('leaves a message untouched when its copy sits on a design-board background image', async () => {
+      // Regression test: such a message used to render completely blank. The
+      // board is compensated back to its original (light) colours while the
+      // copy on top of it is still inverted - and with brightness(1.5) any
+      // channel below #55 clamps to pure white, so body text landed on the same
+      // #FFFFFF as the board underneath. Rendering the message as-is keeps the
+      // sender's own contrast and matches what mobile Gmail / Dark Reader do
+      // with the same mail. See isBoard in lib/emailBackground.ts.
+      screen = await renderDetail(
+        makeThread(1, {
+          messages: [
+            {
+              senderName: 'Sender',
+              senderEmail: 'sender@example.com',
+              time: '2025-06-03T05:42:00.000Z',
+              to: ['me@example.com'],
+              cc: [],
+              contentHtml:
+                '<table background="https://ci3.googleusercontent.com/board.png" data-email-bg="image" data-email-board=""><tr><td>尊敬的客户，截至昨日最后一笔交易</td></tr></table>',
+              contentText: '尊敬的客户，截至昨日最后一笔交易',
+            },
+          ],
+        }),
+      )
+      await vi.waitUntil(() => [...screen!.container.querySelectorAll('*')].some((el) => el.shadowRoot?.querySelector('table')))
+      const host = [...screen.container.querySelectorAll('*')].find((el) => el.shadowRoot?.querySelector('table')) as HTMLElement
+      await vi.waitUntil(() => host.shadowRoot!.adoptedStyleSheets.length > 0)
+      const css = [...host.shadowRoot!.adoptedStyleSheets]
+        .flatMap((sheet) => [...sheet.cssRules])
+        .map((rule) => rule.cssText)
+        .join('\n')
+      // No invert filter at all - not even scoped to the media query.
+      expect(css).not.toContain('invert(1)')
+      // The always-on colour reset stays: the message still starts from the
+      // browser's own black default, only without the dark-mode pass.
+      expect(css).toContain('color: rgb(0, 0, 0)')
+    })
+
     it('does not leak the app dark-mode --foreground into unstyled email text', async () => {
       // Regression test for a real bug: raw email HTML (e.g. makeThread's
       // default `<p>Body</p>`) usually sets no color of its own, expecting
