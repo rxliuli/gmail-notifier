@@ -1,9 +1,20 @@
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { fakeBrowser } from '@webext-core/fake-browser'
 import { StateManager, type GmailApi } from './StateManager'
-import type { Feed, RSSInfo } from './api/gmail'
+import { CURRENT_EXTRACT_VERSION, type Feed, type RSSInfo, type ThreadMail } from './api/gmail'
 
 vi.stubGlobal('browser', fakeBrowser)
+
+// What getThreadMail resolves with in these tests - a thread with one message
+// and no HTML. extractVersion has to be current or fetchThreads discards it as
+// stale, see the extraction-version tests.
+const THREAD_DETAILS: ThreadMail = {
+  subject: 'x',
+  messageCount: 1,
+  messages: [],
+  styles: [],
+  extractVersion: CURRENT_EXTRACT_VERSION,
+}
 
 describe('StateManager', () => {
   let api: {
@@ -39,6 +50,10 @@ describe('StateManager', () => {
     const stateManager = new StateManager(api)
     await stateManager.fetchThreads()
     api.checkLoginStatus.mockImplementation(async () => true)
+    // Without a resolved detail here the stored thread carries no
+    // extractVersion, i.e. it looks like one extracted by an older version and
+    // is re-fetched on purpose - see the extraction-version tests.
+    api.getThreadMail.mockImplementation(async () => THREAD_DETAILS)
     api.getRSS.mockImplementation(
       async () =>
         ({
@@ -106,7 +121,7 @@ describe('StateManager', () => {
       api.getRSS.mockImplementation(
         async () => ({ email: 'test@test.com', modified: feed.modified, feeds: [feed] }) satisfies RSSInfo,
       )
-      api.getThreadMail.mockImplementation(async () => ({ subject: 'x', messageCount: 1, messages: [], styles: [] }))
+      api.getThreadMail.mockImplementation(async () => THREAD_DETAILS)
       await stateManager.fetchThreads()
     }
 
@@ -149,7 +164,7 @@ describe('StateManager', () => {
       api.getRSS.mockImplementation(
         async () => ({ email: 'test@test.com', modified: feed.modified, feeds: [feed] }) satisfies RSSInfo,
       )
-      api.getThreadMail.mockImplementation(async () => ({ subject: 'x', messageCount: 1, messages: [], styles: [] }))
+      api.getThreadMail.mockImplementation(async () => THREAD_DETAILS)
       await stateManager.fetchThreads()
     }
 
@@ -242,7 +257,7 @@ describe('StateManager', () => {
       api.getRSS.mockImplementation(
         async () => ({ email: 'test@test.com', modified: feed.modified, feeds: [feed, secondFeed] }) satisfies RSSInfo,
       )
-      api.getThreadMail.mockImplementation(async () => ({ subject: 'x', messageCount: 1, messages: [], styles: [] }))
+      api.getThreadMail.mockImplementation(async () => THREAD_DETAILS)
       await stateManager.fetchThreads()
       api.markAsRead.mockImplementation(async () => {})
       await stateManager.markAllAsRead([feed.url, secondFeed.url])
@@ -260,7 +275,7 @@ describe('StateManager', () => {
       api.getRSS.mockImplementation(
         async () => ({ email: 'test@test.com', modified: feed.modified, feeds: [feed, secondFeed] }) satisfies RSSInfo,
       )
-      api.getThreadMail.mockImplementation(async () => ({ subject: 'x', messageCount: 1, messages: [], styles: [] }))
+      api.getThreadMail.mockImplementation(async () => THREAD_DETAILS)
       await stateManager.fetchThreads()
       api.markAsRead.mockImplementation(async () => {})
       await stateManager.viewed(feed.url)
@@ -275,7 +290,7 @@ describe('StateManager', () => {
       api.getRSS.mockImplementation(
         async () => ({ email: 'test@test.com', modified: feed.modified, feeds: [feed] }) satisfies RSSInfo,
       )
-      api.getThreadMail.mockImplementation(async () => ({ subject: 'x', messageCount: 1, messages: [], styles: [] }))
+      api.getThreadMail.mockImplementation(async () => THREAD_DETAILS)
       await stateManager.fetchThreads()
     }
 
@@ -322,7 +337,7 @@ describe('StateManager', () => {
   describe('account switching', () => {
     it('replaces the previous account threads instead of merging them into a mixed inbox', async () => {
       api.checkLoginStatus.mockImplementation(async () => true)
-      api.getThreadMail.mockImplementation(async () => ({ subject: 'x', messageCount: 1, messages: [], styles: [] }))
+      api.getThreadMail.mockImplementation(async () => THREAD_DETAILS)
       api.markAsRead.mockImplementation(async () => {})
       const stateManager = new StateManager(api)
 
@@ -358,7 +373,7 @@ describe('StateManager', () => {
       api.getRSS.mockImplementation(
         async () => ({ email: 'test@test.com', modified: feed.modified, feeds: [feed] }) satisfies RSSInfo,
       )
-      api.getThreadMail.mockImplementation(async () => ({ subject: 'x', messageCount: 1, messages: [], styles: [] }))
+      api.getThreadMail.mockImplementation(async () => THREAD_DETAILS)
       await stateManager.fetchThreads()
     }
 
@@ -370,7 +385,7 @@ describe('StateManager', () => {
       api.getThreadMail.mockImplementation(
         () =>
           new Promise((resolve) => {
-            release = () => resolve({ subject: 'x', messageCount: 1, messages: [], styles: [] })
+            release = () => resolve(THREAD_DETAILS)
           }),
       )
       return () => release()
@@ -426,7 +441,7 @@ describe('StateManager', () => {
       api.getRSS.mockImplementation(
         async () => ({ email: 'test@test.com', modified: feed.modified, feeds: [feed] }) satisfies RSSInfo,
       )
-      api.getThreadMail.mockImplementation(async () => ({ subject: 'x', messageCount: 1, messages: [], styles: [] }))
+      api.getThreadMail.mockImplementation(async () => THREAD_DETAILS)
       await stateManager.fetchThreads()
       api.markAsRead.mockImplementation(async () => {})
       await stateManager.viewed(feed.url)
@@ -434,6 +449,40 @@ describe('StateManager', () => {
       // Force refetch re-fetches thread details for every feed item again.
       expect(api.getThreadMail).toBeCalledTimes(2)
       expect(stateManager.getUnreadThreads().map((it) => it.url)).toEqual([feed.url])
+    })
+  })
+
+  describe('extraction version', () => {
+    async function seedOneThread(stateManager: StateManager) {
+      api.checkLoginStatus.mockImplementation(async () => true)
+      api.getRSS.mockImplementation(
+        async () => ({ email: 'test@test.com', modified: feed.modified, feeds: [feed] }) satisfies RSSInfo,
+      )
+      api.getThreadMail.mockImplementation(async () => THREAD_DETAILS)
+      await stateManager.fetchThreads()
+    }
+
+    // Both branches of the keep-filter would otherwise carry the thread over:
+    // its `modified` still matches the feed entry, and a viewed thread is kept
+    // regardless of that. Neither helps if the stored contentHtml came from an
+    // older extractThreadMail - it can be wrong (that is what a board mail
+    // looked like after the heuristic changed) while the source HTML on Gmail's
+    // side is byte-for-byte the same.
+    it.each([
+      ['an older extraction version', CURRENT_EXTRACT_VERSION - 1],
+      ['no extraction version at all (stored before the field existed)', undefined],
+    ])('re-fetches a viewed thread carrying %s', async (_case, staleVersion) => {
+      const stateManager = new StateManager(api)
+      await seedOneThread(stateManager)
+      api.markAsRead.mockImplementation(async () => {})
+      await stateManager.viewed(feed.url)
+      expect(api.getThreadMail).toBeCalledTimes(1)
+      ;(stateManager.threads[0] as { extractVersion?: number }).extractVersion = staleVersion
+
+      await stateManager.fetchThreads()
+
+      expect(api.getThreadMail).toBeCalledTimes(2)
+      expect(stateManager.threads[0]!.extractVersion).toBe(CURRENT_EXTRACT_VERSION)
     })
   })
 })

@@ -7,7 +7,7 @@ import { queryClient } from '@/lib/queryClient'
 import { createStyleSheets } from '@/lib/addStyle'
 import { DARK_MODE_RULES } from './DetailPage'
 import type { EmailThread } from '@/lib/StateManager'
-import type { ThreadMail } from '@/lib/api/gmail'
+import { CURRENT_EXTRACT_VERSION, type ThreadMail } from '@/lib/api/gmail'
 
 vi.stubGlobal('browser', fakeBrowser)
 
@@ -33,6 +33,7 @@ function makeThread(messageCount: number, overrides: Partial<EmailThread> = {}):
     messageCount,
     messages,
     styles: [],
+    extractVersion: CURRENT_EXTRACT_VERSION,
     ...overrides,
   }
 }
@@ -147,44 +148,6 @@ describe('DetailPage', () => {
       expect(mediaRule.cssText).toContain('invert(1)')
     })
 
-    it('leaves a message untouched when its copy sits on a design-board background image', async () => {
-      // Regression test: such a message used to render completely blank. The
-      // board is compensated back to its original (light) colours while the
-      // copy on top of it is still inverted - and with brightness(1.5) any
-      // channel below #55 clamps to pure white, so body text landed on the same
-      // #FFFFFF as the board underneath. Rendering the message as-is keeps the
-      // sender's own contrast and matches what mobile Gmail / Dark Reader do
-      // with the same mail. See isBoard in lib/emailBackground.ts.
-      screen = await renderDetail(
-        makeThread(1, {
-          messages: [
-            {
-              senderName: 'Sender',
-              senderEmail: 'sender@example.com',
-              time: '2025-06-03T05:42:00.000Z',
-              to: ['me@example.com'],
-              cc: [],
-              contentHtml:
-                '<table background="https://ci3.googleusercontent.com/board.png" data-email-bg="image" data-email-board=""><tr><td>尊敬的客户，截至昨日最后一笔交易</td></tr></table>',
-              contentText: '尊敬的客户，截至昨日最后一笔交易',
-            },
-          ],
-        }),
-      )
-      await vi.waitUntil(() => [...screen!.container.querySelectorAll('*')].some((el) => el.shadowRoot?.querySelector('table')))
-      const host = [...screen.container.querySelectorAll('*')].find((el) => el.shadowRoot?.querySelector('table')) as HTMLElement
-      await vi.waitUntil(() => host.shadowRoot!.adoptedStyleSheets.length > 0)
-      const css = [...host.shadowRoot!.adoptedStyleSheets]
-        .flatMap((sheet) => [...sheet.cssRules])
-        .map((rule) => rule.cssText)
-        .join('\n')
-      // No invert filter at all - not even scoped to the media query.
-      expect(css).not.toContain('invert(1)')
-      // The always-on colour reset stays: the message still starts from the
-      // browser's own black default, only without the dark-mode pass.
-      expect(css).toContain('color: rgb(0, 0, 0)')
-    })
-
     it('does not leak the app dark-mode --foreground into unstyled email text', async () => {
       // Regression test for a real bug: raw email HTML (e.g. makeThread's
       // default `<p>Body</p>`) usually sets no color of its own, expecting
@@ -205,38 +168,64 @@ describe('DetailPage', () => {
       expect(getComputedStyle(unstyledText).color).toBe('rgb(0, 0, 0)')
     })
 
-    // Background images cannot be compensated the way img/video are (a
-    // background is painted by the element itself, there is no second element
-    // to hang the reverse filter on), so lib/emailBackground.ts re-declares
-    // them as custom properties and these rules repaint them on an ::before
-    // layer. Applied directly instead of through the media query, which a
-    // browser test cannot switch on.
-    it('repaints a lifted background image on a compensated layer', () => {
+    // Background images are painted by the element itself, so the only thing
+    // that can be compensated is the element: lib/emailBackground.ts marks it
+    // with data-email-bg, and these rules apply the same reverse filter
+    // img/video get to the marked block as a whole - artwork and text together.
+    // Applied directly instead of through the media query, which a browser test
+    // cannot switch on.
+    it('compensates a marked background-image block as a whole', () => {
       const host = document.createElement('div')
       document.body.appendChild(host)
       try {
         const shadow = host.attachShadow({ mode: 'open' })
         shadow.adoptedStyleSheets = createStyleSheets([DARK_MODE_RULES])
-        const el = document.createElement('div')
-        el.setAttribute('data-email-bg', 'image')
-        el.setAttribute('style', 'background-image: url(https://i.pinimg.com/cover.jpg); background-size: cover; --email-bg-image: url(https://i.pinimg.com/cover.jpg); --email-bg-size: cover; width: 120px; height: 120px')
-        shadow.appendChild(el)
 
-        // The element's own (fully inverted) copy of the image is hidden...
-        expect(getComputedStyle(el).backgroundImage).toBe('none')
-        // ...and the layer that replaces it carries the reverse filter, so it
-        // cancels the host's invert instead of being inverted by it.
-        const layer = getComputedStyle(el, '::before')
-        expect(layer.filter).toContain('invert(1)')
-        expect(layer.backgroundImage).toContain('i.pinimg.com/cover.jpg')
-        expect(layer.backgroundSize).toBe('cover')
-        // Behind the cell's own content, above its background.
-        expect(layer.zIndex).toBe('-1')
-        expect(parseFloat(layer.top)).toBe(0)
-        // Containing block + stacking context, otherwise z-index: -1 would
-        // paint behind the email's own white body background.
-        expect(getComputedStyle(el).position).toBe('relative')
-        expect(getComputedStyle(el).isolation).toBe('isolate')
+        // A td, because that is what the marker actually lands on in real
+        // mails: bg-image blocks are `td[background]` (Pinterest) and
+        // `table[background]` (bank statements), not divs.
+        const table = document.createElement('table')
+        const row = table.insertRow()
+        const block = row.insertCell()
+        block.setAttribute('data-email-bg', '')
+        block.setAttribute('style', 'background-image: url(https://i.pinimg.com/cover.jpg); width: 120px; height: 120px')
+        shadow.appendChild(table)
+
+        const nestedImg = document.createElement('img')
+        nestedImg.src = 'https://i.pinimg.com/pin.jpg'
+        block.appendChild(nestedImg)
+
+        const nestedBlock = document.createElement('div')
+        nestedBlock.setAttribute('data-email-bg', '')
+        block.appendChild(nestedBlock)
+
+        const plain = document.createElement('div')
+        shadow.appendChild(plain)
+
+        // The other real shape is a marked table - bank statements paint the
+        // background on the layout table itself - and a filter applies to a
+        // table box the same way it does to a cell, with no display override.
+        const markedTable = document.createElement('table')
+        markedTable.setAttribute('data-email-bg', '')
+        shadow.appendChild(markedTable)
+
+        // The cancellation filter is on the element itself, so its background
+        // image and the text inside it keep the colours the sender chose.
+        const filter = getComputedStyle(block).filter
+        expect(filter).toContain('invert(1)')
+        expect(filter).toContain('hue-rotate(180deg)')
+        // Nothing clears the background any more - the element paints it itself.
+        expect(getComputedStyle(block).backgroundImage).toContain('i.pinimg.com/cover.jpg')
+
+        // A nested image and a nested marked block are already covered by the
+        // ancestor's cancellation, so they must not be cancelled a second time.
+        expect(getComputedStyle(nestedImg).filter).toBe('none')
+        expect(getComputedStyle(nestedBlock).filter).toBe('none')
+
+        // A plain element keeps the ordinary dark-mode treatment (only the
+        // ancestor's filter applies to it).
+        expect(getComputedStyle(plain).filter).toBe('none')
+        expect(getComputedStyle(markedTable).filter).toContain('invert(1)')
       } finally {
         host.remove()
       }

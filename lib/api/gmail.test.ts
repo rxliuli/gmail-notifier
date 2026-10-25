@@ -11,12 +11,12 @@ import {
   parseAddressField,
   extractGmailInfo,
   parseReplyTo,
+  CURRENT_EXTRACT_VERSION,
   type Feed,
   type ThreadMail,
 } from './gmail'
 import { parseDocument, parseFeed } from 'htmlparser2'
 import { selectOne } from 'css-select'
-import { hasBoardImage } from '../emailBackground'
 
 describe('extractRSS', () => {
   it('empty', () => {
@@ -78,6 +78,7 @@ describe('extractContent', () => {
   it('plain text', async () => {
     const content = (await import('./assets/content-plaintext.html?raw')).default
     const mail = extractThreadMail(content)
+    expect(mail.extractVersion).eq(CURRENT_EXTRACT_VERSION)
     expect(mail.subject).eq('Test Text')
     expect(mail.messages[0]!.senderName).eq('璃 琉')
     expect(mail.messages[0]!.senderEmail).eq('rxliuli@outlook.com')
@@ -110,85 +111,44 @@ describe('extractContent', () => {
     expect(img.src).include('https://mail.google.com/mail/u/0')
   })
   it.todo('attachment')
-  it('re-declares background images for the dark-mode filter', async () => {
-    // Background images get no reverse filter of their own (the shadow CSS can
-    // only reach img/video), so extractThreadMail hands them to the stylesheet
-    // as custom properties on a marker attribute - see lib/emailBackground.ts.
+  it('marks background images so the dark-mode filter can render those blocks whole', async () => {
+    // A background image is painted by the element itself, so the shadow CSS can
+    // only compensate it by filtering that element - and its subtree - as a
+    // whole. extractThreadMail adds no more than the marker: light mode is
+    // unaffected, the legacy attribute and the inline declarations stay exactly
+    // as they were in the source. See lib/emailBackground.ts.
     const content = (await import('./assets/content-background.html?raw')).default
     const mail = extractThreadMail(content)
     const doc = new DOMParser().parseFromString(mail.messages[0]!.contentHtml, 'text/html')
 
     const cover = doc.querySelector('td[background]') as HTMLElement
-    expect(cover.getAttribute('data-email-bg')).toBe('image')
-    expect(cover.style.getPropertyValue('--email-bg-image')).toBe(
-      'url("https://ci3.googleusercontent.com/meips/cover=s0-d-e1-ft#https://i.pinimg.com/400x300/ff/9c/e5/ff9ce53887d76b1b072701cbbb6168bc.jpg")',
-    )
-    expect(cover.style.getPropertyValue('--email-bg-size')).toBe('cover')
-    expect(cover.style.getPropertyValue('--email-bg-position')).toBe('center')
-    expect(cover.style.getPropertyValue('--email-bg-repeat')).toBe('no-repeat')
-    // Light mode still paints from the attribute itself.
+    expect(cover.getAttribute('data-email-bg')).toBe('')
     expect(cover.getAttribute('background')).toContain('i.pinimg.com/400x300')
+    expect(cover.getAttribute('style')).toBe(
+      'border-radius:16px 0 0 16px;background-size:cover;background-position:center;background-repeat:no-repeat',
+    )
 
-    const banner = doc.querySelector('[data-email-bg="shorthand"]') as HTMLElement
-    expect(banner.style.getPropertyValue('--email-bg-shorthand')).toBe('#111111 url("https://i.pinimg.com/banner.jpg") no-repeat center/cover')
+    const banner = doc.querySelector('div[style*="background: #111111"]') as HTMLElement
+    expect(banner.getAttribute('data-email-bg')).toBe('')
+    expect(banner.getAttribute('style')).toBe(
+      'background: #111111 url("https://i.pinimg.com/banner.jpg") no-repeat center/cover; color: #ffffff; padding: 8px',
+    )
 
-    const hero = doc.querySelector('div[data-email-bg="image"]:not([background])') as HTMLElement
-    expect(hero.style.getPropertyValue('--email-bg-image')).toBe('url(https://i.pinimg.com/hero.jpg)')
-    expect(hero.style.getPropertyValue('--email-bg-size')).toBe('contain')
+    const hero = doc.querySelector('div[style^="background-image:url"]') as HTMLElement
+    expect(hero.getAttribute('data-email-bg')).toBe('')
+    expect(hero.getAttribute('style')).toBe(
+      'background-image:url(https://i.pinimg.com/hero.jpg); background-size: contain; background-repeat: no-repeat',
+    )
 
     // The real <img> tiles next to them are untouched: they are already
     // compensated by the `img, video` rule.
     expect(doc.querySelector('img')!.hasAttribute('data-email-bg')).toBe(false)
 
-    // Picture-only tiles are not "design boards", so this mail is still a dark
-    // mode one (the fixture's own banner happens to carry a caption - see the
-    // board test below for both directions of that judgement).
-    expect(doc.querySelector('td[background]')!.hasAttribute('data-email-board')).toBe(false)
+    // Exactly the three image-painted elements, and nothing copy-dependent: a
+    // picture-only collage tile is marked the same way a bank board is.
+    expect(doc.querySelectorAll('[data-email-bg]')).toHaveLength(3)
   })
-  it('marks a message whose copy sits on a background board, so dark mode leaves it alone', () => {
-    // A board mail is one background image that *is* the layout, with the copy
-    // laid out on top of it - see isBoard in lib/emailBackground.ts for why
-    // inverting that is unwinnable (the copy ends up the colour of the board).
-    // The marker has to survive the parse5 round-trip this test exercises:
-    // extractThreadMail serialises the body and the popup only ever sees the
-    // resulting string.
-    const copy = '尊敬的客户，截至昨日最后一笔交易，您的额度和积分信息如下：'
-    const content = `<!DOCTYPE html><html><head><title>Gmail - Test Board</title></head><body>
-      <table width="100%" border="0" class="message">
-        <tr><td><font size="-1"><b>招商银行 </b>&lt;ccsvc@message.cmbchina.com&gt;</font></td>
-            <td align="right"><font size="-1">Tue, Jun 3, 2025 at 2:51 PM</font></td></tr>
-        <tr><td colspan="2"><div style="overflow: hidden">
-          <table width="660" height="950" background="https://ci3.googleusercontent.com/meips/board.png">
-            <tr><td><div style="color: rgb(64, 64, 64)"><font size="-1">${copy}</font></div></td></tr>
-          </table>
-        </div></td></tr>
-      </table></body></html>`
-    const mail = extractThreadMail(content)
-    const html = mail.messages[0]!.contentHtml
 
-    expect(hasBoardImage(html)).toBe(true)
-    const doc = new DOMParser().parseFromString(html, 'text/html')
-    expect(doc.querySelector('table')!.hasAttribute('data-email-board')).toBe(true)
-    // Light mode is still handled by the browser from the original attribute.
-    expect(html).toContain('background="https://ci3.googleusercontent.com/meips/board.png"')
-  })
-  it('does not treat a picture-only background tile as a design board', () => {
-    // The other half of the judgement: Pinterest-style collage tiles are painted
-    // with an image but carry no copy, so compensating them is correct and the
-    // message keeps its dark mode.
-    const content = `<!DOCTYPE html><html><head><title>Gmail - Test Collage</title></head><body>
-      <table width="100%" border="0" class="message">
-        <tr><td><font size="-1"><b>Pinterest </b>&lt;recommendations@inspire.pinterest.com&gt;</font></td>
-            <td align="right"><font size="-1">Tue, Jun 3, 2025 at 3:13 PM</font></td></tr>
-        <tr><td colspan="2"><div style="overflow: hidden">
-          <table><tr><td background="https://i.pinimg.com/400x300/cover.jpg" style="background-size:cover">
-            <a href="#"><div style="height:241px;width:241px"> </div></a>
-          </td></tr></table>
-        </div></td></tr>
-      </table></body></html>`
-    const mail = extractThreadMail(content)
-    expect(hasBoardImage(mail.messages[0]!.contentHtml)).toBe(false)
-  })
   it('reply', async () => {
     const content = (await import('./assets/content-reply.html?raw')).default
     const mail = extractThreadMail(content, 'https://mail.google.com/mail/u/0')
@@ -261,6 +221,7 @@ describe('parseReplyTo', () => {
     subject: 'Test',
     messageCount: 2,
     styles: [],
+    extractVersion: CURRENT_EXTRACT_VERSION,
     messages: [
       {
         senderName: 'Me',

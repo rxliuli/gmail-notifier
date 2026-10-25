@@ -1,5 +1,5 @@
 import { sortBy, uniqBy } from 'es-toolkit'
-import type { Feed, RSSInfo, ThreadMail } from './api/gmail'
+import { CURRENT_EXTRACT_VERSION, type Feed, type RSSInfo, type ThreadMail } from './api/gmail'
 import { debugLog } from './debugLog'
 
 export interface EmailThread extends Feed, ThreadMail {}
@@ -141,10 +141,44 @@ export class StateManager {
         ? []
         : threadsBefore.filter(
             (t) =>
+              // A thread extracted by other code is never usable, whatever else
+              // is true of it: contentHtml is not a plain copy of the source, it
+              // carries decisions made at extraction time (the dark-mode
+              // background-image marker), so a copy produced by another version
+              // can render wrong while the mail itself is byte-for-byte
+              // unchanged. Keeping this
+              // check makes the invariant explicit and self-healing - anything
+              // that does not match, including a thread stored before the field
+              // existed (undefined !== any version), is dropped - and it means a
+              // future version bump needs no migration code.
+              //
+              // What it does *not* do today, which is what the comment this
+              // replaces got wrong: `threads` starts empty in every service
+              // worker and restore() only reads notifiedEmails, so this filter
+              // never sees a thread a previous run persisted. After an extension
+              // update the stale cache is refreshed by the ordinary full
+              // re-fetch a fresh worker performs on startup
+              // (entrypoints/background.ts), not by this clause; in practice the
+              // clause only ever sees threads this build produced in this run. It
+              // is the invariant, not the refresh mechanism.
+              //
+              // Residual, reachable window: the popup reads threads straight out
+              // of storage.local (lib/useMailQuery.ts), so between an update and
+              // the background's first successful fetch it can still render
+              // pre-update contentHtml - a background-image block rendered the
+              // old way, if that is what the update fixed. That self-heals as
+              // soon as the fetch lands and rewrites storage.
+              //
+              // Ordering consequence of sitting outside the viewed/modified
+              // disjunction below: a stale thread that has already left the feed
+              // is dropped rather than re-fetched, because newFeeds only holds
+              // feed entries - unavoidable, there is nothing left to re-fetch it
+              // from.
+              t.extractVersion === CURRENT_EXTRACT_VERSION &&
               // Keep read emails
-              this.viewedEmails.has(t.url) ||
-              // Keep unchanged emails
-              rss.feeds.find((it) => it.url === t.url)?.modified === t.modified,
+              (this.viewedEmails.has(t.url) ||
+                // Keep unchanged emails
+                rss.feeds.find((it) => it.url === t.url)?.modified === t.modified),
           )
       const newFeeds = rss.feeds.filter((it) => !keptThreads.find((t) => t.url === it.url))
       const newThreads = await Promise.all(

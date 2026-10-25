@@ -9,7 +9,6 @@ import { memo, useEffect, useMemo } from 'react'
 import root from 'react-shadow'
 import { useCollapseState } from '@/lib/useCollapseState'
 import { createStyleSheets } from '@/lib/addStyle'
-import { hasBoardImage } from '@/lib/emailBackground'
 import { debugLog } from '@/lib/debugLog'
 
 // Not importing detailRoute directly from router.tsx: that file imports
@@ -38,9 +37,19 @@ const ShadowDiv = root.div as NonNullable<typeof root.div>
 // boundary so unstyled text always starts from the same baseline a normal
 // browser gives it. Anything the email DOES style explicitly (inline color,
 // its own <style> rules) still overrides this via normal cascade specificity.
+//
+// The white background belongs here for the same reason, next to that black:
+// both are the baseline a plain browser gives raw HTML, and dark mode is built
+// on exactly that baseline - invert() turns this white into the pure black that
+// brightness() below relies on. Keeping it here, unconditional, means the host
+// only ever restates the browser's own baseline and the dark-mode sheet never
+// has to; that matters because the filter is applied on top of this baseline,
+// not instead of it, and because the popup's own `--background` is white in
+// light mode too - so light mode is unaffected either way.
 const BASE_RESET_STYLE = `
   :host {
     color: #000;
+    background: white;
   }
 `
 
@@ -50,20 +59,27 @@ const BASE_RESET_STYLE = `
 // on a dark background; re-inverting img/video cancels it out so photos and
 // logos aren't rendered as photonegatives.
 //
+// Known limitation of inverting rather than re-theming, unchanged by any of the
+// above: a mail that is *already* dark by design (Steam's login notifications
+// are the usual example) inverts into a light one. Fixing that would mean
+// detecting and honouring the sender's own dark styling instead of forcing our
+// own, which is a different mechanism, not a tweak to these rules.
+//
 // Low-contrast text (light gray "secondary info" on white, common for fine
 // print / error details) needs extra help: invert() alone preserves the
 // original color distance, so text that was barely legible on white becomes
 // barely legible on black instead of actually improving.
 //
-// brightness(), not contrast(), fixes that gap: the host background is
-// forced to white, so after invert() it's pinned at pure black (0), where
-// brightness's multiply-by-b leaves it unchanged (0 * b = 0) - only the
-// non-zero text lightens. contrast() looks like the obvious tool for "low
-// contrast text" but is wrong here: it pivots around 50% gray, and inverted
-// light-gray text already lands below that pivot (same side as the black
-// background), so contrast pushes it *toward* black too, shrinking the gap
-// instead of widening it - confirmed live, it made previously-faint text
-// disappear entirely.
+// brightness(), not contrast(), fixes that gap: the host background is white
+// (set by BASE_RESET_STYLE, not by these rules - see there for why it lives
+// next to the colour reset rather than in here), so after invert() it's pinned
+// at pure black (0), where brightness's multiply-by-b leaves it unchanged
+// (0 * b = 0) - only the non-zero text lightens. contrast() looks like the
+// obvious tool for "low contrast text" but is wrong here: it pivots around 50%
+// gray, and inverted light-gray text already lands below that pivot (same side
+// as the black background), so contrast pushes it *toward* black too, shrinking
+// the gap instead of widening it - confirmed live, it made previously-faint
+// text disappear entirely.
 const DARK_MODE_BRIGHTNESS = 1.5
 
 // Wrapped in the media query itself rather than picked in JS - the whole
@@ -75,9 +91,8 @@ const DARK_MODE_BRIGHTNESS = 1.5
 export const DARK_MODE_RULES = `
     :host {
       filter: invert(1) hue-rotate(180deg) brightness(${DARK_MODE_BRIGHTNESS});
-      background: white;
     }
-    img, video, [data-email-bg]::before {
+    img, video {
       /* Order matters here, and it's the opposite of what's intuitive: the
          brightness cancellation has to run BEFORE invert/hue-rotate, not
          after. brightness() is a plain per-channel multiply (no pivot,
@@ -96,52 +111,44 @@ export const DARK_MODE_RULES = `
     /* Background images (legacy background= attributes, inline
        background-image / background shorthands - see liftBackgroundImages)
        are painted by the element itself, so the img/video rule above can
-       never reach them: they used to stay fully inverted, showing up as
-       photographic negatives with the hue spun 180 degrees. Pinterest's
+       never reach them: their artwork stayed fully inverted, showing up as
+       a photographic negative with the hue spun 180 degrees. Pinterest's
        board mails are the worst offender, because their big collage tiles
        are td[background] while only the small ones are real img elements.
 
-       lib/emailBackground.ts re-declares those images as custom properties
-       (keeping the original declaration too, so light mode is untouched),
-       and here we repaint them on an ::before layer of their own - the one
-       layer we can hang the compensation filter on.
+       The element is therefore the thing being compensated now: the
+       extraction pass only marks it ([data-email-bg]), and the same
+       cancellation filter the img rule uses is applied to that element, so
+       its background image *and* the text inside it render exactly as the
+       sender designed them - dark copy on a light board, white copy on a
+       dark banner. That replaced an ::before layer repainted from custom
+       properties, which fixed the artwork but not the copy: the text stayed
+       inverted and came out white-on-white on a light board.
 
-       A pseudo-element rather than an injected div: raw email CSS (which we
-       do not control) targets div/td children freely and would happily
-       restyle or hide a child of ours, while ::before is only reachable by
-       rules that explicitly ask for it. */
+       Known cost, the same one img already accepted: a filter makes the
+       element a containing block for absolutely positioned descendants and a
+       stacking context, so a position: fixed inside a marked block is
+       contained by that block instead of the viewport.
+
+       The value is the same expression, in the same order, as the img/video
+       rule above (see the ordering note there for why brightness() has to
+       come first) - only its target differs. */
     [data-email-bg] {
-      /* The element's own copy of the image has to go, or it would still be
-         drawn (inverted) underneath the compensated layer. Only
-         background-image is cleared, so a background-color the same
-         declaration set stays where it was. */
-      background-image: none !important;
-      /* Containing block + stacking context for the layer. Without the
-         stacking context the layer's z-index: -1 would paint behind the
-         email's own (white) body background and vanish. Both only apply in
-         dark mode, so light mode keeps the exact layout it had before. */
-      position: relative;
-      isolation: isolate;
+      filter: brightness(${1 / DARK_MODE_BRIGHTNESS}) invert(1) hue-rotate(180deg);
     }
-    [data-email-bg]::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      right: 0;
-      bottom: 0;
-      left: 0;
-      /* Behind the cell's own content, but above its background. */
-      z-index: -1;
-      border-radius: inherit;
+    /* A marked block is already rendered as-is by the filter above, so
+       anything inside it that the earlier rules would compensate has to be
+       left alone or it gets cancelled a *second* time (a nested photo would
+       come out inverted again). No filter, therefore: the ancestor's
+       cancellation already covers it, background and all. The
+       element-inside-element selector has to beat the [data-email-bg] rule
+       above by specificity, not by order - a marked block nested in another
+       must lose its own filter, not re-apply it. */
+    [data-email-bg] img, [data-email-bg] video {
+      filter: none;
     }
-    [data-email-bg='image']::before {
-      background-image: var(--email-bg-image, none);
-      background-size: var(--email-bg-size, auto);
-      background-position: var(--email-bg-position, 0% 0%);
-      background-repeat: var(--email-bg-repeat, repeat);
-    }
-    [data-email-bg='shorthand']::before {
-      background: var(--email-bg-shorthand, none);
+    [data-email-bg] [data-email-bg] {
+      filter: none;
     }
 `
 
@@ -150,26 +157,10 @@ const DARK_MODE_FILTER_STYLE = `
 ${DARK_MODE_RULES}  }
 `
 
-// Messages that are not "a document with a background" but "a background image
-// with a document on top" cannot be darkened by inverting them: the board's
-// copy is inverted (to white) while the board itself is compensated back to its
-// original (light) colours, so the text ends up the same colour as the pixels
-// underneath it and the message renders blank. See lib/emailBackground.ts' isBoard
-// for the measurements and for why neither half-inverted mix works.
-//
-// Such a message is therefore rendered as-is: no invert filter, original
-// colours, original contrast. It stays light inside our dark chrome, which is
-// exactly what mobile Gmail's dark mode and Dark Reader do with the same mail
-// (and both still downgrade the copy to ~2.2:1 by lifting its colour, where
-// leaving it alone keeps the sender's own 9.7:1).
-function darkModeStyleSources(contentHtml: string): string[] {
-  return hasBoardImage(contentHtml) ? [] : [DARK_MODE_FILTER_STYLE]
-}
-
 const MailContent = memo((props: { contentHtml: string; styles: string[] }) => {
   const styleSheets = useMemo(() => {
-    return createStyleSheets([BASE_RESET_STYLE, ...props.styles, ...darkModeStyleSources(props.contentHtml)])
-  }, [props.styles, props.contentHtml])
+    return createStyleSheets([BASE_RESET_STYLE, ...props.styles, DARK_MODE_FILTER_STYLE])
+  }, [props.styles])
   return (
     <ShadowDiv styleSheets={styleSheets}>
       <div dangerouslySetInnerHTML={{ __html: props.contentHtml }} style={{ overflowX: 'auto' }} />

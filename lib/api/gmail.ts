@@ -211,12 +211,36 @@ interface Message {
   attachments?: Attachment[] // Attachments (if any)
 }
 
+// Bumped whenever extractThreadMail's output changes in a way that makes
+// already-extracted HTML wrong: contentHtml is not just a copy of the source,
+// it carries decisions made at extraction time - the dark-mode
+// background-image marker - so HTML produced by another version can render
+// wrong even though the mail itself is unchanged (the old per-image custom
+// properties and message-global board marker are read by nobody now).
+//
+// The value is stamped onto every ThreadMail and compared in
+// StateManager.fetchThreads, which refuses to keep a thread carrying another
+// version. That comparison is the invariant, not the refresh path: threads are
+// not hydrated from storage, so a service worker restart (every extension
+// update) starts with an empty list and re-fetches the whole feed anyway, and
+// the persisted cache is refreshed by that fetch. See the comment at the check
+// for what it does and does not cover.
+//
+// Version 1: background-image blocks are marked whole (data-email-bg) and
+// rendered as-is, text included; the per-image custom properties and the
+// message-global board marker are gone, so HTML extracted by the version that
+// wrote them no longer matches what the dark-mode stylesheet expects and has
+// to be re-extracted.
+export const CURRENT_EXTRACT_VERSION = 1
+
 export interface ThreadMail {
   subject: string
   messageCount: number
   messages: Message[]
   // CSS extracted from <style> tags in the fetched document, applied to each message's shadow root
   styles: string[]
+  // Which extractThreadMail produced this, see CURRENT_EXTRACT_VERSION.
+  extractVersion: number
 }
 
 // Tue, Jun 3, 2025 at 10:12 AM => 2025-06-03T10:12:00.000Z
@@ -317,8 +341,9 @@ export function extractThreadMail(text: string, baseUrl?: string): ThreadMail {
           attachments.push({ fileName, url })
         }
       })
-      // Background images have no element of their own for the dark-mode filter to
-      // un-invert (see liftBackgroundImages), so re-declare them where it can.
+      // Background images are painted by the element itself, so the only way
+      // the dark-mode filter can reach them is to mark the element and render
+      // it whole - see liftBackgroundImages.
       liftBackgroundImages(contentDiv)
 
       const images = [...querySelectorAll('img[src]', contentDiv)]
@@ -362,6 +387,7 @@ export function extractThreadMail(text: string, baseUrl?: string): ThreadMail {
     messageCount,
     messages,
     styles,
+    extractVersion: CURRENT_EXTRACT_VERSION,
   }
 }
 
