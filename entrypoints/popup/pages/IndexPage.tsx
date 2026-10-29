@@ -36,16 +36,19 @@ import { hasUnsubscribeLink } from '@/lib/unsubscribe'
 
 function MailItem({
   thread,
+  senderUrls,
   showAccount,
   onClick,
 }: {
   thread: EmailThread
+  // Every listed thread from this thread's sender, this one included.
+  senderUrls: string[]
   showAccount: boolean
   onClick: () => void
 }) {
   const queryClient = useQueryClient()
   async function gmailAction(
-    cmd: Exclude<GmailAction['cmd'], 'markAllAsRead'>,
+    cmd: Extract<GmailAction, { url: string }>['cmd'],
     msg: string,
   ) {
     try {
@@ -62,19 +65,19 @@ function MailItem({
   }
   const code = getThreadCode(thread)
   const canUnsubscribe = hasUnsubscribeLink(thread.messages.at(-1)?.contentHtml ?? '')
-  async function unsubscribe() {
+  async function unsubscribe(cleanup: 'archive' | 'archiveAll' | 'deleteAll') {
     try {
       const kind = await bgMessager.sendMessage('unsubscribe', thread.url)
-      await queryClient.invalidateQueries({ queryKey: mailQueryKey })
       if (kind === null) {
         toast.error('No unsubscribe option found')
         return
       }
+      await removeFromSender(cleanup)
       toast.success(
         {
-          post: 'Unsubscribed and archived',
-          open: 'Unsubscribe page opened, mail archived',
-          mail: 'Unsubscribe mail ready to send, mail archived',
+          post: 'Unsubscribed',
+          open: 'Unsubscribe page opened',
+          mail: 'Unsubscribe mail ready to send',
         }[kind],
       )
     } catch (err) {
@@ -82,6 +85,24 @@ function MailItem({
       toast.error('Unsubscribe failed')
     }
   }
+  async function removeFromSender(cmd: 'archive' | 'archiveAll' | 'deleteAll') {
+    await bgMessager.sendMessage(
+      'gmailAction',
+      cmd === 'archive' ? { cmd, url: thread.url } : { cmd, urls: senderUrls },
+    )
+    await queryClient.invalidateQueries({ queryKey: mailQueryKey })
+  }
+  async function senderAction(cmd: 'archiveAll' | 'deleteAll') {
+    const msg = `${cmd === 'archiveAll' ? 'Archive' : 'Delete'} ${senderUrls.length} mails`
+    try {
+      await removeFromSender(cmd)
+      toast.success(msg)
+    } catch (err) {
+      console.error(err)
+      toast.error(msg + ' failed')
+    }
+  }
+  const othersFromSender = senderUrls.length > 1
   async function copyCode(code: string) {
     try {
       await navigator.clipboard.writeText(code)
@@ -109,11 +130,11 @@ function MailItem({
             {thread.author.name} &lt;{thread.author.email}&gt;
           </span>
           {/* Time and action buttons are mutually exclusive and both in this row */}
-          <span className="text-xs text-gray-400 whitespace-nowrap group-hover:hidden block">
+          <span className="text-xs text-gray-400 whitespace-nowrap group-hover:hidden group-has-[[data-state=open]]:hidden block">
             {dayjs(thread.modified).format('YYYY-MM-DD HH:mm')}
           </span>
           <div
-            className="flex gap-1 group-hover:flex hidden"
+            className="flex gap-1 group-hover:flex group-has-[[data-state=open]]:flex hidden"
             onClick={(ev) => ev.stopPropagation()}
           >
             <Button
@@ -140,10 +161,40 @@ function MailItem({
             >
               <MailOpenIcon />
             </Button>
-            {canUnsubscribe && (
-              <Button size="icon" variant="ghost" title={'Unsubscribe'} onClick={unsubscribe}>
-                <MailMinusIcon />
-              </Button>
+            {(canUnsubscribe || othersFromSender) && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="icon" variant="ghost" title={canUnsubscribe ? 'Unsubscribe' : 'From this sender'}>
+                    <MailMinusIcon />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align={'end'}>
+                  {canUnsubscribe && (
+                    <DropdownMenuItem onClick={() => unsubscribe('archive')}>Unsubscribe and archive</DropdownMenuItem>
+                  )}
+                  {canUnsubscribe && othersFromSender && (
+                    <>
+                      <DropdownMenuItem onClick={() => unsubscribe('archiveAll')}>
+                        Unsubscribe and archive all {senderUrls.length} from sender
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => unsubscribe('deleteAll')}>
+                        Unsubscribe and delete all {senderUrls.length} from sender
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                  {canUnsubscribe && othersFromSender && <DropdownMenuSeparator />}
+                  {othersFromSender && (
+                    <>
+                      <DropdownMenuItem onClick={() => senderAction('archiveAll')}>
+                        Archive all {senderUrls.length} from sender
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => senderAction('deleteAll')}>
+                        Delete all {senderUrls.length} from sender
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
             <Button
               size="icon"
@@ -329,12 +380,18 @@ function MailList({
 }) {
   // Only worth the extra line when the list actually mixes accounts.
   const showAccount = new Set(threads.map((it) => it.account)).size > 1
+  const urlsBySender = new Map<string, string[]>()
+  for (const it of threads) {
+    const sender = it.author.email.toLowerCase()
+    urlsBySender.set(sender, [...(urlsBySender.get(sender) ?? []), it.url])
+  }
   return (
     <div className="w-full">
       {threads.map((thread) => (
         <MailItem
           key={thread.url}
           thread={thread}
+          senderUrls={urlsBySender.get(thread.author.email.toLowerCase())!}
           showAccount={showAccount}
           onClick={() => onSelectFeed(thread)}
         />

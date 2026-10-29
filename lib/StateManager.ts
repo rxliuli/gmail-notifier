@@ -247,10 +247,23 @@ export class StateManager {
     await this.notify()
   }
   async markAllAsRead(urls: string[]) {
+    await this.removeAll(urls, (url) => this.api.markAsRead(url))
+  }
+  async archiveAll(urls: string[]) {
+    await this.removeAll(urls, (url) => this.api.archive(url))
+  }
+  async deleteAll(urls: string[]) {
+    await this.removeAll(urls, (url) => this.api.delete(url))
+  }
+  private async removeAll(urls: string[], action: (url: string) => Promise<void>) {
     this.threads = this.threads.filter((t) => !urls.includes(t.url))
-    Promise.allSettled(urls.map((url) => this.api.markAsRead(url))).catch((err) => {
-      console.error('markAllAsRead', err)
-      this.fetchThreads()
+    Promise.allSettled(urls.map(action)).then((results) => {
+      // Some calls failed: refetch so those threads come back instead of
+      // silently vanishing from the list.
+      if (results.some((it) => it.status === 'rejected')) {
+        console.error('bulk action', results)
+        this.fetchThreads()
+      }
     })
     await this.notify()
   }

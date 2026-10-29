@@ -264,7 +264,6 @@ async function start() {
       const params = new URLSearchParams({ view: 'cm', fs: '1', to: plan.to, su: plan.subject })
       await browser.tabs.create({ url: `https://mail.google.com/mail/u/${parseAccountSlot(url) ?? '0'}/?${params}` })
     }
-    await stateManager.archive(url)
     return plan.kind
   })
   bgMessager.onMessage('gmailAction', async (ev) => {
@@ -279,6 +278,14 @@ async function start() {
     }
     if (data.cmd === 'markAllAsRead') {
       await stateManager.markAllAsRead(data.urls)
+      return
+    }
+    if (data.cmd === 'archiveAll') {
+      await stateManager.archiveAll(data.urls)
+      return
+    }
+    if (data.cmd === 'deleteAll') {
+      await stateManager.deleteAll(data.urls)
       return
     }
     if (data.cmd === 'archive') {

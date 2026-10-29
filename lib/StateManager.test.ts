@@ -265,6 +265,45 @@ describe('StateManager', () => {
       expect(api.markAsRead).toBeCalledTimes(2)
     })
 
+    describe('archiveAll / deleteAll (everything from one sender)', () => {
+      const secondFeed: Feed = {
+        ...feed,
+        url: 'https://mail.google.com/mail/u/0/?account_id=test@test.com&message_id=2381d2747ab8c227&view=conv&extsrc=atom',
+      }
+      async function seedTwo(stateManager: StateManager) {
+        api.checkLoginStatus.mockImplementation(async () => true)
+        api.getAllRSS.mockImplementation(
+          async () => [{ email: 'test@test.com', modified: feed.modified, feeds: [feed, secondFeed] }] satisfies RSSInfo[],
+        )
+        api.getThreadMail.mockImplementation(async () => THREAD_DETAILS)
+        await stateManager.fetchThreads()
+      }
+
+      it.each(['archive', 'delete'] as const)('%sAll removes every listed thread', async (action) => {
+        const stateManager = new StateManager(api)
+        await seedTwo(stateManager)
+        api[action].mockImplementation(async () => {})
+        await stateManager[`${action}All`]([feed.url, secondFeed.url])
+        expect(stateManager.threads).toEqual([])
+        expect(api[action]).toBeCalledWith(feed.url)
+        expect(api[action]).toBeCalledWith(secondFeed.url)
+      })
+
+      it('refetches when one of the calls fails, so that mail comes back', async () => {
+        const stateManager = new StateManager(api)
+        await seedTwo(stateManager)
+        api.archive.mockImplementation(async (url) => {
+          if (url === secondFeed.url) throw new Error('503')
+        })
+        // Gmail still has the failed one in the inbox
+        api.getAllRSS.mockImplementation(
+          async () => [{ email: 'test@test.com', modified: feed.modified, feeds: [secondFeed] }] satisfies RSSInfo[],
+        )
+        await stateManager.archiveAll([feed.url, secondFeed.url])
+        await vi.waitFor(() => expect(stateManager.threads.map((t) => t.url)).toEqual([secondFeed.url]))
+      })
+    })
+
     it('clearViewed drops only the threads that were viewed', async () => {
       const stateManager = new StateManager(api)
       api.checkLoginStatus.mockImplementation(async () => true)

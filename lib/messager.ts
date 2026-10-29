@@ -16,7 +16,7 @@ export type GmailAction =
       url: string
     }
   | {
-      cmd: 'markAllAsRead'
+      cmd: 'markAllAsRead' | 'archiveAll' | 'deleteAll'
       urls: string[]
     }
 
