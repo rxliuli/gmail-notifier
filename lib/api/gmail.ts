@@ -704,9 +704,20 @@ export function parseReplyTo(
   }
 }
 
-function getMessageMetadata(messageId: string) {
-  // https://mail.google.com/mail/u/0/?ui=2&ik=${ik}&view=om&th=${threadId}
-  throw new Error('not implemented')
+// The message's full RFC 822 source - Gmail's "Show original" - which is
+// the only place headers such as List-Unsubscribe are visible.
+export async function getRawMessage(url: string): Promise<string> {
+  const info = extractGmailInfo(url)
+  if (!info) throw Error('no_links')
+  const ik = await getIk(info.n)
+  const resp = await fetch(
+    `https://mail.google.com/mail/u/${info.n}/?ui=2&ik=${ik}&view=om&th=${info.thread}`,
+    { credentials: 'include' },
+  )
+  if (!resp.ok) {
+    throw new Error(`getRawMessage: ${resp.status}`)
+  }
+  return resp.text()
 }
 
 async function getThreadId(messageId: string, ik: string) {

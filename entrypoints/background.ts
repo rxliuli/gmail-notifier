@@ -5,6 +5,7 @@ import {
   deleteMail,
   getActiveInboxUrl,
   getAllRSS,
+  getRawMessage,
   getThreadMail,
   markAsRead,
   markAsSpam,
@@ -16,6 +17,7 @@ import {
 import type { PublicPath } from 'wxt/browser'
 import { StateManager, type EmailThread } from '@/lib/StateManager'
 import { getThreadCode } from '@/lib/otp'
+import { planUnsubscribe } from '@/lib/unsubscribe'
 import { registerActionMenus } from '@/lib/menu'
 import { menus } from '@/lib/constants'
 import { debugLog } from '@/lib/debugLog'
@@ -232,6 +234,39 @@ async function start() {
 
   // listen to message
   bgMessager.onMessage('refreshThreads', () => stateManager.refresh())
+  bgMessager.onMessage('unsubscribe', async ({ data: url }) => {
+    const html = stateManager.threads.find((t) => t.url === url)?.messages.at(-1)?.contentHtml ?? ''
+    // The body link still works without headers, so a failed fetch only
+    // costs the better options.
+    const raw = await getRawMessage(url).catch(async (err) => {
+      await debugLog('unsubscribe: raw message fetch failed ->', err)
+      return null
+    })
+    const plan = planUnsubscribe(raw, html)
+    await debugLog('unsubscribe: plan ->', plan)
+    if (!plan) {
+      return null
+    }
+    if (plan.kind === 'post') {
+      // RFC 8058: a cookie-less form POST. no-cors because the sender owes
+      // us no CORS headers - the response is opaque, which is fine, there is
+      // nothing in it to act on.
+      await fetch(plan.url, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'List-Unsubscribe=One-Click',
+      })
+    } else if (plan.kind === 'open') {
+      await browser.tabs.create({ url: plan.url })
+    } else {
+      // Composed from the account the newsletter was sent to.
+      const params = new URLSearchParams({ view: 'cm', fs: '1', to: plan.to, su: plan.subject })
+      await browser.tabs.create({ url: `https://mail.google.com/mail/u/${parseAccountSlot(url) ?? '0'}/?${params}` })
+    }
+    await stateManager.archive(url)
+    return plan.kind
+  })
   bgMessager.onMessage('gmailAction', async (ev) => {
     const data = ev.data
     if (data.cmd === 'markAsRead') {

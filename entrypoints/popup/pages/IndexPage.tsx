@@ -16,6 +16,7 @@ import {
   MailPlusIcon,
   BugIcon,
   CopyIcon,
+  MailMinusIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { debugLog } from '@/lib/debugLog'
@@ -31,6 +32,7 @@ import {
 import { FaDiscord, FaGithub } from 'react-icons/fa'
 import type { EmailThread } from '@/lib/StateManager'
 import { getThreadCode } from '@/lib/otp'
+import { hasUnsubscribeLink } from '@/lib/unsubscribe'
 
 function MailItem({
   thread,
@@ -59,6 +61,27 @@ function MailItem({
     }
   }
   const code = getThreadCode(thread)
+  const canUnsubscribe = hasUnsubscribeLink(thread.messages.at(-1)?.contentHtml ?? '')
+  async function unsubscribe() {
+    try {
+      const kind = await bgMessager.sendMessage('unsubscribe', thread.url)
+      await queryClient.invalidateQueries({ queryKey: mailQueryKey })
+      if (kind === null) {
+        toast.error('No unsubscribe option found')
+        return
+      }
+      toast.success(
+        {
+          post: 'Unsubscribed and archived',
+          open: 'Unsubscribe page opened, mail archived',
+          mail: 'Unsubscribe mail ready to send, mail archived',
+        }[kind],
+      )
+    } catch (err) {
+      console.error(err)
+      toast.error('Unsubscribe failed')
+    }
+  }
   async function copyCode(code: string) {
     try {
       await navigator.clipboard.writeText(code)
@@ -117,6 +140,11 @@ function MailItem({
             >
               <MailOpenIcon />
             </Button>
+            {canUnsubscribe && (
+              <Button size="icon" variant="ghost" title={'Unsubscribe'} onClick={unsubscribe}>
+                <MailMinusIcon />
+              </Button>
+            )}
             <Button
               size="icon"
               variant="ghost"
