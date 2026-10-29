@@ -233,10 +233,13 @@ function Toolbar() {
               Popout
             </a>
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => navigate({ to: '/sound' })}>
-            <BellIcon />
-            Notification sound
-          </DropdownMenuItem>
+          {/* Only Firefox's background page can play audio (see lib/sound.ts). */}
+          {import.meta.env.FIREFOX && (
+            <DropdownMenuItem onClick={() => navigate({ to: '/sound' })}>
+              <BellIcon />
+              Notification sound
+            </DropdownMenuItem>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => navigate({ to: '/debug' })}>
             <BugIcon />

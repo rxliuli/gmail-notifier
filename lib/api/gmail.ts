@@ -521,7 +521,7 @@ interface SyncSession {
   xsrf: string
   btai: string
 }
-const syncSessionCache = new Map<string, SyncSession>()
+const syncSessionCache = new Map<string, Promise<SyncSession>>()
 
 export function parseSyncSession(html: string): SyncSession {
   const fields = {
@@ -543,14 +543,19 @@ export function parseSyncSession(html: string): SyncSession {
   return { xsrf: fields.xsrf!, btai: JSON.stringify(btai) }
 }
 
-async function getSyncSession(n: string, fresh = false): Promise<SyncSession> {
+// The promise is cached, so a bulk action's parallel calls share one page fetch.
+function getSyncSession(n: string, fresh = false): Promise<SyncSession> {
   const cached = syncSessionCache.get(n)
   if (cached && !fresh) {
     return cached
   }
-  const resp = await fetch(`https://mail.google.com/mail/u/${n}/`, { credentials: 'include' })
-  const session = parseSyncSession(await resp.text())
+  const session = (async () => {
+    const resp = await fetch(`https://mail.google.com/mail/u/${n}/`, { credentials: 'include' })
+    if (!resp.ok) throw new Error(`sync session: page returned ${resp.status}`)
+    return parseSyncSession(await resp.text())
+  })()
   syncSessionCache.set(n, session)
+  session.catch(() => syncSessionCache.delete(n))
   return session
 }
 

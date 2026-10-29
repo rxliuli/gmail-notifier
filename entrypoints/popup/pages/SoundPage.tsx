@@ -9,6 +9,7 @@ import {
   playSound,
   setNotificationSound,
 } from '@/lib/sound'
+import { isPopoutTab } from '../view'
 
 const soundQueryKey = ['notificationSound']
 
@@ -17,9 +18,6 @@ export function SoundPage() {
   const queryClient = useQueryClient()
   const soundQuery = useQuery({ queryKey: soundQueryKey, queryFn: getNotificationSound })
   const sound = soundQuery.data ?? null
-  // Firefox closes the toolbar popup as soon as a file dialog opens, so the
-  // picker only works in the standalone tab.
-  const isTab = new URLSearchParams(location.search).get('view') === 'tab'
 
   async function pick(file: File | undefined) {
     if (!file) return
@@ -52,7 +50,9 @@ export function SoundPage() {
           Current: <span className="font-medium">{sound ? sound.name : 'none (system sound only)'}</span>
         </p>
         <div className="flex gap-2">
-          {isTab ? (
+          {/* Firefox closes the toolbar popup as soon as a file dialog opens,
+              so the picker only works in the standalone tab. */}
+          {isPopoutTab ? (
             <Button asChild>
               <label>
                 Choose sound file

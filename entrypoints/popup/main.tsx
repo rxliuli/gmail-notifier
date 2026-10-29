@@ -2,6 +2,7 @@ import ReactDOM from 'react-dom/client'
 import App from './App.js'
 import './style.css'
 import { debugLog } from '@/lib/debugLog'
+import { isPopoutTab } from './view'
 
 // Root cause of a whole cluster of Safari-only extension-popup bugs, found
 // the hard way over one long debugging session (each looked unrelated until
@@ -51,7 +52,6 @@ import { debugLog } from '@/lib/debugLog'
 //
 // Set as early as possible, before the first paint, so Safari never sees an
 // unpinned frame even for a moment.
-const isPopoutTab = new URLSearchParams(location.search).get('view') === 'tab'
 
 // Diagnostic for the click-kills-the-popup bug: the background log showed the
 // popup page being torn down at the instant a mail row is clicked (port

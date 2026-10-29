@@ -526,4 +526,11 @@ describe('gmail actions', () => {
     stub([500, 500])
     await expect(markAsRead(THREAD_URL.replace('/u/7/', '/u/9/'))).rejects.toThrow('500')
   })
+
+  it('shares one page fetch between parallel actions', async () => {
+    const fetchMock = stub([200, 200])
+    const url = THREAD_URL.replace('/u/7/', '/u/10/')
+    await Promise.all([markAsRead(url), markAsRead(url)])
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method !== 'POST')).toHaveLength(1)
+  })
 })

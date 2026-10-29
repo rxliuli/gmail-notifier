@@ -63,13 +63,6 @@ async function sendNotification(stateManager: StateManager, feed: EmailThread) {
     message: `From: ${feed.author.name} <${feed.author.email}>\n${feed.summary}`,
   })
   await playNotificationSound()
-  browser.notifications.onClicked.addListener(async (id) => {
-    await browser.notifications.clear(id)
-    if (id === notificationId) {
-      await browser.action.openPopup()
-      browser.notifications.clear(notificationId)
-    }
-  })
   setTimeout(async () => {
     console.log('auto clear notification', notificationId)
     await browser.notifications.clear(notificationId)
@@ -92,6 +85,13 @@ export default defineBackground(async () => {
 })
 
 async function start() {
+  // One listener for every notification; adding one per notification piled
+  // them up, so each click ran every earlier one too.
+  browser.notifications?.onClicked.addListener(async (id) => {
+    if (!id.startsWith('gmail-notifier-')) return
+    await browser.notifications.clear(id)
+    await browser.action.openPopup()
+  })
   const stateManager = new StateManager({
     checkLoginStatus,
     getAllRSS,
