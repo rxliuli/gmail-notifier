@@ -391,7 +391,7 @@ function DetailToolbar(props: {
         title="Open in Gmail"
         onClick={(ev) => {
           ev.preventDefault()
-          openMailInWeb(thread.url)
+          void openMailInWeb(thread.url).then(() => window.close())
         }}
       >
         {thread.subject} ({thread.messageCount})

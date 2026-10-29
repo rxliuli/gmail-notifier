@@ -174,7 +174,10 @@ function Toolbar() {
         size="icon"
         variant="ghost"
         title={'Open in Gmail'}
-        onClick={async () => openMailInWeb(await getActiveInboxUrl())}
+        onClick={async () => {
+          await openMailInWeb(await getActiveInboxUrl())
+          window.close()
+        }}
       >
         <ExternalLinkIcon />
       </Button>

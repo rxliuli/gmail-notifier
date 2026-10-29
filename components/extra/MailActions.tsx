@@ -141,7 +141,7 @@ export function MailActions({ thread, senderUrls }: { thread: EmailThread; sende
         size="icon"
         variant="ghost"
         title={'Open in Gmail'}
-        onClick={() => openMailInWeb(thread.url)}
+        onClick={() => openMailInWeb(thread.url).then(() => window.close())}
       >
         <ExternalLinkIcon />
       </Button>
