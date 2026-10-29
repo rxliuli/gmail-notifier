@@ -39,16 +39,6 @@ function MailItem({
   senderUrls: string[]
   onClick: () => void
 }) {
-  const code = getThreadCode(thread)
-  async function copyCode(code: string) {
-    try {
-      await navigator.clipboard.writeText(code)
-      toast.success('Code copied')
-    } catch (err) {
-      console.error(err)
-      toast.error('Copy failed')
-    }
-  }
   return (
     <div
       key={thread.url}
@@ -78,27 +68,46 @@ function MailItem({
           </div>
         </div>
         {/* Subject */}
-        <div className="flex items-center gap-2">
-          <div className="font-bold text-sm truncate flex-1">{thread.title}</div>
-          {code && (
-            <Button
-              size="sm"
-              variant="secondary"
-              className="h-6 px-2 font-mono"
-              title={'Copy code'}
-              onClick={(ev) => {
-                ev.stopPropagation()
-                copyCode(code)
-              }}
-            >
-              <CopyIcon />
-              {code}
-            </Button>
-          )}
-        </div>
+        <div className="font-bold text-sm truncate">{thread.title}</div>
         {/* Summary */}
         <div className="text-xs text-gray-400 truncate">{thread.summary}</div>
       </div>
+    </div>
+  )
+}
+
+async function copyCode(code: string) {
+  try {
+    await navigator.clipboard.writeText(code)
+    toast.success('Code copied')
+  } catch (err) {
+    console.error(err)
+    toast.error('Copy failed')
+  }
+}
+
+// Codes from unread mail, newest first, pinned to the bottom of the popup.
+function CodeBar({ threads }: { threads: EmailThread[] }) {
+  const codes = threads
+    .map((thread) => ({ thread, code: getThreadCode(thread) }))
+    .filter((it): it is { thread: EmailThread; code: string } => it.code !== null)
+    .sort((a, b) => dayjs(b.thread.modified).valueOf() - dayjs(a.thread.modified).valueOf())
+    .slice(0, 3)
+  if (!codes.length) return null
+  return (
+    <div className="sticky bottom-0 z-10 flex flex-col gap-1 px-4 py-2 bg-card border-t border-border">
+      {codes.map(({ thread, code }) => (
+        <button
+          key={thread.url}
+          className="flex items-center gap-3 rounded-md px-3 py-1.5 bg-secondary hover:bg-secondary/80 text-left"
+          title={'Copy code'}
+          onClick={() => copyCode(code)}
+        >
+          <span className="font-mono text-lg font-semibold tracking-widest">{code}</span>
+          <span className="flex-1 min-w-0 truncate text-xs text-muted-foreground">{thread.author.name}</span>
+          <CopyIcon className="w-4 h-4 shrink-0" />
+        </button>
+      ))}
     </div>
   )
 }
@@ -325,6 +334,7 @@ export function IndexPage() {
           </a>
         )}
       </div>
+      <CodeBar threads={mailQuery.data?.threads ?? []} />
     </div>
   )
 }
