@@ -14,6 +14,7 @@ import {
   MailPlusIcon,
   BugIcon,
   CopyIcon,
+  BellIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { debugLog } from '@/lib/debugLog'
@@ -231,6 +232,10 @@ function Toolbar() {
               <SquareArrowOutUpRightIcon />
               Popout
             </a>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => navigate({ to: '/sound' })}>
+            <BellIcon />
+            Notification sound
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => navigate({ to: '/debug' })}>

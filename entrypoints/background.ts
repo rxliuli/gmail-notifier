@@ -21,6 +21,7 @@ import { planUnsubscribe } from '@/lib/unsubscribe'
 import { registerActionMenus } from '@/lib/menu'
 import { menus } from '@/lib/constants'
 import { debugLog } from '@/lib/debugLog'
+import { playNotificationSound } from '@/lib/sound'
 
 // Update badge
 async function updateBadge(unreadCount: number) {
@@ -61,6 +62,7 @@ async function sendNotification(stateManager: StateManager, feed: EmailThread) {
     title: (import.meta.env.DEV ? 'DEV: ' : '') + withCode(feed),
     message: `From: ${feed.author.name} <${feed.author.email}>\n${feed.summary}`,
   })
+  await playNotificationSound()
   browser.notifications.onClicked.addListener(async (id) => {
     await browser.notifications.clear(id)
     if (id === notificationId) {
