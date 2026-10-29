@@ -9,7 +9,8 @@ function formatArg(arg: unknown): string {
     return arg
   }
   try {
-    return JSON.stringify(arg)
+    // Errors nested in objects (allSettled results) would otherwise print as {}.
+    return JSON.stringify(arg, (_, v) => (v instanceof Error ? `${v.name}: ${v.message}` : v))
   } catch {
     return String(arg)
   }

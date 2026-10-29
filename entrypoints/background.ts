@@ -232,6 +232,41 @@ async function start() {
     },
   )
 
+  // Firefox stamps the extension's action POST with Origin: moz-extension://…,
+  // and Gmail answers a cross-site action with its re-auth page instead of
+  // applying it. Chrome's extension requests pass, so this is Firefox only.
+  if (import.meta.env.FIREFOX) {
+    const ownOrigin = new URL(browser.runtime.getURL('/')).origin
+    browser.webRequest.onBeforeSendHeaders.addListener(
+      (details) => {
+        const originUrl = (details as { originUrl?: string }).originUrl ?? ''
+        if (details.method !== 'POST' || !originUrl.startsWith(ownOrigin)) {
+          return {}
+        }
+        const headers = (details.requestHeaders ?? []).map((h) => {
+          const name = h.name.toLowerCase()
+          if (name === 'origin') return { name: h.name, value: 'https://mail.google.com' }
+          if (name === 'sec-fetch-site') return { name: h.name, value: 'same-origin' }
+          return h
+        })
+        // Names only for cookies: enough to see whether the session ones go out.
+        void debugLog(
+          'gmailAction: request headers ->',
+          (details.requestHeaders ?? []).map((h) =>
+            h.name.toLowerCase() === 'cookie'
+              ? `cookie: ${(h.value ?? '').split('; ').map((c) => c.split('=')[0]).join(',')}`
+              : /^(origin|referer|sec-fetch-)/i.test(h.name)
+                ? `${h.name}: ${h.value}`
+                : h.name,
+          ),
+        )
+        return { requestHeaders: headers }
+      },
+      { urls: ['https://mail.google.com/mail/u/*/s/*'] },
+      ['blocking', 'requestHeaders'],
+    )
+  }
+
   // listen to message
   bgMessager.onMessage('refreshThreads', () => stateManager.refresh())
   bgMessager.onMessage('unsubscribe', async ({ data: url }) => {

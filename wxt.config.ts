@@ -57,7 +57,7 @@ export default defineConfig({
       manifest.permissions!.push('notifications', 'idle')
     }
     if (env.browser === 'firefox') {
-      manifest.permissions!.push('notifications', 'idle')
+      manifest.permissions!.push('notifications', 'idle', 'webRequestBlocking')
       manifest.browser_specific_settings = {
         gecko: {
           id:
