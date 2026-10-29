@@ -215,13 +215,15 @@ const MailMessage = function MailMessage(props: {
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between">
             <span className="font-semibold text-foreground min-w-0 truncate">{message.senderName}</span>
-            <time
-              dateTime={dayjs(message.time).toISOString()}
-              title={dayjs(message.time).format('YYYY-MM-DD hh:mm:ss')}
-              className="text-xs text-muted-foreground ml-2 shrink-0"
-            >
-              {dayjs(message.time).format('YYYY-MM-DD hh:mm')}
-            </time>
+            {message.time && (
+              <time
+                dateTime={dayjs(message.time).toISOString()}
+                title={dayjs(message.time).format('YYYY-MM-DD hh:mm:ss')}
+                className="text-xs text-muted-foreground ml-2 shrink-0"
+              >
+                {dayjs(message.time).format('YYYY-MM-DD hh:mm')}
+              </time>
+            )}
           </div>
           <div className="text-sm text-muted-foreground truncate mt-1">{message.contentText}</div>
         </div>
@@ -248,7 +250,7 @@ const MailMessage = function MailMessage(props: {
               <span className="text-muted-foreground ml-2">&lt;{message.senderEmail}&gt;</span>
             </div>
             <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0 ml-2">
-              {dayjs(message.time).format('YYYY-MM-DD HH:mm')}
+              {message.time && dayjs(message.time).format('YYYY-MM-DD HH:mm')}
             </span>
           </div>
           <div className="text-sm text-muted-foreground mt-1">

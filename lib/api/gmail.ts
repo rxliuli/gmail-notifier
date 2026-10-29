@@ -249,10 +249,23 @@ export interface ThreadMail {
   extractVersion: number
 }
 
+const DATE_FORMATS = ['MMM D, YYYY h:mm A', 'MMM D, YYYY H:mm', 'D MMM YYYY h:mm A', 'D MMM YYYY H:mm']
+
 // Tue, Jun 3, 2025 at 10:12 AM => 2025-06-03T10:12:00.000Z
+// The print view's date text varies (", " or " at " before the time, 12h or
+// 24h, narrow no-break space before AM/PM, day-first). An unknown format
+// returns '' - a missing time beats dropping every account's mail.
 export function formatDate(date: string): string {
-  const cleaned = date.replace(/^\w+,\s*/, '')
-  return dayjs(cleaned, 'MMM D, YYYY [at] h:mm A').toISOString()
+  const cleaned = date
+    .replace(/[\u00a0\u202f]/g, ' ')
+    .replace(/^\w+,\s*/, '')
+    .replace(/(\d{4}),?\s+(?:at\s+)?/, '$1 ')
+  const parsed = dayjs(cleaned, DATE_FORMATS, true)
+  if (!parsed.isValid()) {
+    void debugLog('formatDate: unknown date format ->', JSON.stringify(date))
+    return ''
+  }
+  return parsed.toISOString()
 }
 
 export function parseAddressField(html: string): string[] {
