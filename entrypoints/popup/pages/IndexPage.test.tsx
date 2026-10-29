@@ -29,6 +29,24 @@ describe('IndexPage', () => {
     fakeBrowser.reset()
   })
 
+  it('lists each account in its own section, including one with nothing unread', async () => {
+    await browser.storage.local.set({
+      accounts: ['a@example.com', 'b@example.com'],
+      threads: [
+        { ...makeThread('a1'), title: 'For A', account: 'a@example.com' },
+        { ...makeThread('a2'), title: 'Also for A', account: 'a@example.com' },
+      ],
+    })
+    const screen = await render(
+      <QueryClientProvider client={new QueryClient()}>
+        <RouterProvider router={createAppRouter(['/'])} />
+      </QueryClientProvider>,
+    )
+    await expect.element(screen.getByText('For A', { exact: true })).toBeVisible()
+    const headers = [...document.querySelectorAll('section > h2')].map((it) => it.textContent)
+    expect(headers).toEqual(['a@example.com2', 'b@example.com0'])
+  })
+
   it('refresh button pulls fresh state directly instead of depending solely on the background push', async () => {
     // Regression test: the refresh button used to only send 'refreshThreads'
     // and wait for background's 'refreshPopup' push to update the view. On

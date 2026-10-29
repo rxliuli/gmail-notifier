@@ -37,13 +37,11 @@ import { hasUnsubscribeLink } from '@/lib/unsubscribe'
 function MailItem({
   thread,
   senderUrls,
-  showAccount,
   onClick,
 }: {
   thread: EmailThread
   // Every listed thread from this thread's sender, this one included.
   senderUrls: string[]
-  showAccount: boolean
   onClick: () => void
 }) {
   const queryClient = useQueryClient()
@@ -235,7 +233,6 @@ function MailItem({
         </div>
         {/* Summary */}
         <div className="text-xs text-gray-400 truncate">{thread.summary}</div>
-        {showAccount && <div className="text-xs text-primary truncate">{thread.account}</div>}
       </div>
     </div>
   )
@@ -372,30 +369,47 @@ function Toolbar() {
 }
 
 function MailList({
+  accounts,
   threads,
   onSelectFeed,
 }: {
+  accounts: string[]
   threads: EmailThread[]
   onSelectFeed: (thread: EmailThread) => void
 }) {
-  // Only worth the extra line when the list actually mixes accounts.
-  const showAccount = new Set(threads.map((it) => it.account)).size > 1
   const urlsBySender = new Map<string, string[]>()
   for (const it of threads) {
     const sender = it.author.email.toLowerCase()
     urlsBySender.set(sender, [...(urlsBySender.get(sender) ?? []), it.url])
   }
+  const items = (list: EmailThread[]) =>
+    list.map((thread) => (
+      <MailItem
+        key={thread.url}
+        thread={thread}
+        senderUrls={urlsBySender.get(thread.author.email.toLowerCase())!}
+        onClick={() => onSelectFeed(thread)}
+      />
+    ))
+  if (accounts.length < 2) {
+    return <div className="w-full">{items(threads)}</div>
+  }
+  // One section per account, in slot order, including accounts with nothing
+  // unread - so every signed-in account is visibly being watched.
   return (
     <div className="w-full">
-      {threads.map((thread) => (
-        <MailItem
-          key={thread.url}
-          thread={thread}
-          senderUrls={urlsBySender.get(thread.author.email.toLowerCase())!}
-          showAccount={showAccount}
-          onClick={() => onSelectFeed(thread)}
-        />
-      ))}
+      {accounts.map((account) => {
+        const own = threads.filter((it) => it.account === account)
+        return (
+          <section key={account}>
+            <h2 className="sticky top-0 z-10 flex justify-between px-4 py-1 text-xs font-medium bg-muted text-muted-foreground border-b">
+              <span className="truncate">{account}</span>
+              <span>{own.length}</span>
+            </h2>
+            {items(own)}
+          </section>
+        )
+      })}
     </div>
   )
 }
@@ -437,7 +451,11 @@ export function IndexPage() {
         )}
       >
         {mailQuery.data?.accounts.length ? (
-          <MailList threads={mailQuery.data.threads} onSelectFeed={onSelectFeed} />
+          <MailList
+            accounts={mailQuery.data.accounts}
+            threads={mailQuery.data.threads}
+            onSelectFeed={onSelectFeed}
+          />
         ) : (
           <a href={'https://mail.google.com/mail/u/0/#inbox'} target="_blank">
             <Button>Please login to Gmail</Button>
