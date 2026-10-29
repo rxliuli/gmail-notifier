@@ -247,6 +247,25 @@ describe('StateManager', () => {
       expect(api.markAsSpam).toBeCalledWith(feed.url)
     })
 
+    it('does not notify again for a mail the user read that comes back on the next poll', async () => {
+      const stateManager = new StateManager(api)
+      await seedOneThread(stateManager)
+      expect(stateManager.getNewThreads()).toEqual([])
+      // Gmail didn't take the mark-as-read, so the refetch has it again
+      api.markAsRead.mockImplementation(async () => {
+        throw new Error('403')
+      })
+      // background.ts sends notifications from a listener, i.e. before
+      // notify() rebuilds notifiedEmails - so that is where to look
+      const seenAsNew: string[][] = []
+      stateManager.on(async () => {
+        seenAsNew.push(stateManager.getNewThreads().map((t) => t.url))
+      })
+      await stateManager.markAsRead(feed.url)
+      await vi.waitFor(() => expect(stateManager.threads.map((t) => t.url)).toEqual([feed.url]))
+      expect(seenAsNew.flat()).toEqual([])
+    })
+
     it('markAllAsRead removes every listed thread', async () => {
       const stateManager = new StateManager(api)
       api.checkLoginStatus.mockImplementation(async () => true)

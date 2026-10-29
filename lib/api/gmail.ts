@@ -1,7 +1,6 @@
 import { last } from 'es-toolkit'
 import dayjs from 'dayjs'
 import customParseFormat from 'dayjs/plugin/customParseFormat'
-import { Lru } from 'toad-cache'
 import { parse } from 'parse5'
 import {
   getAttribute,
@@ -472,7 +471,6 @@ export function extractGmailInfo(url: string) {
 
 // IK/AT cache
 const ikCache = new Map<string, string>()
-const atCache = new Lru<string>(100, 0) // disable at cache
 
 export async function getIk(n: string): Promise<string | null> {
   if (ikCache.has(n)) {
@@ -507,14 +505,11 @@ export async function getIk(n: string): Promise<string | null> {
 }
 
 export async function getAt(n: string): Promise<string | null> {
-  let at = atCache.get(n)
-  // disable at cache for now
+  // Read fresh every time, never cached: Gmail rotates GMAIL_AT, and a stale
+  // one makes every action silently do nothing. (The cache this replaces was
+  // meant to be disabled, but toad-cache's ttl 0 means "never expire".)
+  const at = await getGmailAt(n)
   if (at) {
-    return at
-  }
-  at = await getGmailAt(n)
-  if (at) {
-    atCache.set(n, at)
     return at
   }
 
@@ -532,12 +527,10 @@ export async function getAt(n: string): Promise<string | null> {
   if (e) {
     const args = new URLSearchParams(getAttribute(e, 'href')?.split('?')[1])
     if (args.has('at')) {
-      atCache.set(n, args.get('at')!)
       return args.get('at')
     }
   }
   if (input && getAttribute(input, 'value') && getAttribute(input, 'value') !== 'null') {
-    atCache.set(n, getAttribute(input, 'value')!)
     return getAttribute(input, 'value')!
   }
   throw Error('core.js -> at (h); Try to open Gmail in a browser tab to set the cookie')
@@ -604,11 +597,19 @@ async function gmailAction({ url, cmd, prefs = {} }: { url: string; cmd: string;
   )
 
   const href = `https://mail.google.com/mail/u/${n}/s/?v=or&ik=${ik}&at=${at}&subui=chrome&hl=en&ts=` + Date.now()
-  return fetch(href, {
+  const resp = await fetch(href, {
     method: 'POST',
     credentials: 'include',
     body,
   })
+  // Checked, not fire-and-forget: a rejected action used to look like a
+  // success, so the mail vanished from the list and came back on the next
+  // poll with no trace of why.
+  const text = await resp.text()
+  await debugLog('gmailAction: response ->', { cmd, slot: n, status: resp.status, bodyPreview: text.slice(0, 200) })
+  if (!resp.ok) {
+    throw new Error(`gmailAction ${cmd}: ${resp.status}`)
+  }
 }
 
 export async function archiveMail(url: string, prefs?: Record<string, any>) {

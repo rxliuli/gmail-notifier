@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
   extractThreadMail,
+  markAsRead,
   extractRSS,
   formatDate,
   getOpenWebLink,
@@ -467,5 +468,49 @@ describe('multi-account slot resolution', () => {
   it('defaults to slot 0 with no signal at all', async () => {
     stubBrowser({})
     expect(await detectActiveSlot()).eq('0')
+  })
+})
+
+describe('gmail actions', () => {
+  const THREAD_URL = 'https://mail.google.com/mail/u/7/?account_id=me@example.com&message_id=1987838ba0828a8b&view=conv'
+  let cookie = 'at-1'
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+  function stub(postStatus: number) {
+    vi.stubGlobal('browser', {
+      storage: { local: { get: vi.fn(async () => ({})) } },
+      cookies: {
+        get: vi.fn(async () => ({ value: cookie })),
+        getAllCookieStores: vi.fn(async () => []),
+      },
+    })
+    const fetchMock = vi.fn(async (_href: string, init?: RequestInit) =>
+      init?.method === 'POST'
+        ? new Response('', { status: postStatus })
+        : new Response(`<script>ID_KEY = 'ik-1';</script>`),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    return fetchMock
+  }
+  const postedAt = (fetchMock: ReturnType<typeof stub>) =>
+    fetchMock.mock.calls
+      .filter(([, init]) => init?.method === 'POST')
+      .map(([href]) => new URL(href).searchParams.get('at'))
+
+  it('sends the current GMAIL_AT, not one cached from an earlier action', async () => {
+    // The token used to be cached forever (toad-cache ttl 0 = never expire),
+    // so once Gmail rotated it every action was silently ignored.
+    const fetchMock = stub(200)
+    cookie = 'at-1'
+    await markAsRead(THREAD_URL)
+    cookie = 'at-2'
+    await markAsRead(THREAD_URL)
+    expect(postedAt(fetchMock)).toEqual(['at-1', 'at-2'])
+  })
+
+  it('rejects when Gmail refuses the action instead of pretending it worked', async () => {
+    stub(403)
+    await expect(markAsRead(THREAD_URL)).rejects.toThrow('403')
   })
 })
