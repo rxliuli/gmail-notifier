@@ -12,10 +12,10 @@ import {
   openMailInWeb,
   parseAccountSlot,
   rememberActiveSlot,
-  type Feed,
 } from '@/lib/api/gmail'
 import type { PublicPath } from 'wxt/browser'
-import { StateManager } from '@/lib/StateManager'
+import { StateManager, type EmailThread } from '@/lib/StateManager'
+import { getThreadCode } from '@/lib/otp'
 import { registerActionMenus } from '@/lib/menu'
 import { menus } from '@/lib/constants'
 import { debugLog } from '@/lib/debugLog'
@@ -31,7 +31,12 @@ async function updateBadge(unreadCount: number) {
   await browser.action.setBadgeTextColor({ color: '#FFFFFF' })
 }
 
-async function sendNotification(stateManager: StateManager, feed: Feed) {
+function withCode(thread: EmailThread) {
+  const code = getThreadCode(thread)
+  return code ? `${code} · ${thread.title}` : thread.title
+}
+
+async function sendNotification(stateManager: StateManager, feed: EmailThread) {
   const notificationId = `gmail-notifier-${import.meta.env.MODE}-${feed.url}`
 
   if (stateManager.notifiedEmails.has(feed.url)) {
@@ -50,7 +55,8 @@ async function sendNotification(stateManager: StateManager, feed: Feed) {
   await browser.notifications.create(notificationId, {
     type: 'basic',
     iconUrl: '/icon/48.png' as PublicPath,
-    title: import.meta.env.DEV ? 'DEV: ' + feed.title : feed.title,
+    // Leading with the code means it can be read straight off the toast.
+    title: (import.meta.env.DEV ? 'DEV: ' : '') + withCode(feed),
     message: `From: ${feed.author.name} <${feed.author.email}>\n${feed.summary}`,
   })
   browser.notifications.onClicked.addListener(async (id) => {

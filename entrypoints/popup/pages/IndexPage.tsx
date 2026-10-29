@@ -15,6 +15,7 @@ import {
   SquareArrowOutUpRightIcon,
   MailPlusIcon,
   BugIcon,
+  CopyIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { debugLog } from '@/lib/debugLog'
@@ -29,6 +30,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { FaDiscord, FaGithub } from 'react-icons/fa'
 import type { EmailThread } from '@/lib/StateManager'
+import { getThreadCode } from '@/lib/otp'
 
 function MailItem({
   thread,
@@ -54,6 +56,16 @@ function MailItem({
     } catch (err) {
       console.error(err)
       toast.error(msg + ' failed')
+    }
+  }
+  const code = getThreadCode(thread)
+  async function copyCode(code: string) {
+    try {
+      await navigator.clipboard.writeText(code)
+      toast.success('Code copied')
+    } catch (err) {
+      console.error(err)
+      toast.error('Copy failed')
     }
   }
   return (
@@ -124,7 +136,24 @@ function MailItem({
           </div>
         </div>
         {/* Subject */}
-        <div className="font-bold text-sm truncate">{thread.title}</div>
+        <div className="flex items-center gap-2">
+          <div className="font-bold text-sm truncate flex-1">{thread.title}</div>
+          {code && (
+            <Button
+              size="sm"
+              variant="secondary"
+              className="h-6 px-2 font-mono"
+              title={'Copy code'}
+              onClick={(ev) => {
+                ev.stopPropagation()
+                copyCode(code)
+              }}
+            >
+              <CopyIcon />
+              {code}
+            </Button>
+          )}
+        </div>
         {/* Summary */}
         <div className="text-xs text-gray-400 truncate">{thread.summary}</div>
         {showAccount && <div className="text-xs text-primary truncate">{thread.account}</div>}

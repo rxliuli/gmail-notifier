@@ -20,6 +20,7 @@ function makeThread(url: string) {
     summary: 'summary',
     modified: '2025-06-03T05:42:00.000Z',
     author: { name: 'Test', email: 'test@test.com' },
+    messages: [],
   }
 }
 
