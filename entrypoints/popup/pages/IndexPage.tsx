@@ -3,6 +3,7 @@ import { openMailInWeb, newEmail, getActiveInboxUrl } from '@/lib/api/gmail'
 import { bgMessager } from '@/lib/messager'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
+import { useEffect } from 'react'
 import { mailQueryKey, useMailQuery } from '@/lib/useMailQuery'
 import dayjs from 'dayjs'
 import {
@@ -79,7 +80,7 @@ function MailItem({
 async function copyCode(code: string) {
   try {
     await navigator.clipboard.writeText(code)
-    toast.success('Code copied')
+    window.close()
   } catch (err) {
     console.error(err)
     toast.error('Copy failed')
@@ -93,14 +94,24 @@ function CodeBar({ threads }: { threads: EmailThread[] }) {
     .filter((it): it is { thread: EmailThread; code: string } => it.code !== null)
     .sort((a, b) => dayjs(b.thread.modified).valueOf() - dayjs(a.thread.modified).valueOf())
     .slice(0, 3)
+  const newest = codes[0]?.code
+  // Enter copies the newest code, unless a focused control takes the key itself.
+  useEffect(() => {
+    if (!newest) return
+    function onKeyDown(ev: KeyboardEvent) {
+      if (ev.key === 'Enter' && ev.target === document.body) void copyCode(newest!)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [newest])
   if (!codes.length) return null
   return (
     <div className="sticky bottom-0 z-10 flex flex-col gap-1 px-4 py-2 bg-card border-t border-border">
-      {codes.map(({ thread, code }) => (
+      {codes.map(({ thread, code }, i) => (
         <button
           key={thread.url}
           className="flex items-center gap-3 rounded-md px-3 py-1.5 bg-secondary hover:bg-secondary/80 text-left"
-          title={'Copy code'}
+          title={i === 0 ? 'Copy code (Enter)' : 'Copy code'}
           onClick={() => copyCode(code)}
         >
           <span className="font-mono text-lg font-semibold tracking-widest">{code}</span>
