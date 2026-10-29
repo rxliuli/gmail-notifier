@@ -228,6 +228,29 @@ async function start() {
     },
   )
 
+  // Firefox stamps the extension's action POST with Origin: moz-extension://…;
+  // present it as Gmail's own, the only form the write API was seen to accept.
+  if (import.meta.env.FIREFOX) {
+    const ownOrigin = new URL(browser.runtime.getURL('/')).origin
+    browser.webRequest.onBeforeSendHeaders.addListener(
+      (details) => {
+        const originUrl = (details as { originUrl?: string }).originUrl ?? ''
+        if (details.method !== 'POST' || !originUrl.startsWith(ownOrigin)) {
+          return {}
+        }
+        const headers = (details.requestHeaders ?? []).map((h) => {
+          const name = h.name.toLowerCase()
+          if (name === 'origin') return { name: h.name, value: 'https://mail.google.com' }
+          if (name === 'sec-fetch-site') return { name: h.name, value: 'same-origin' }
+          return h
+        })
+        return { requestHeaders: headers }
+      },
+      { urls: ['https://mail.google.com/sync/u/*/i/s*'] },
+      ['blocking', 'requestHeaders'],
+    )
+  }
+
   // listen to message
   bgMessager.onMessage('refreshThreads', () => stateManager.refresh())
   bgMessager.onMessage('gmailAction', async (ev) => {

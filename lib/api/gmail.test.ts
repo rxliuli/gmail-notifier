@@ -6,6 +6,8 @@ import {
   getOpenWebLink,
   getGmailAt,
   getRSS,
+  markAsRead,
+  parseSyncSession,
   detectActiveSlot,
   parseAccountSlot,
   parseAddressField,
@@ -405,5 +407,65 @@ describe('multi-account slot resolution', () => {
   it('defaults to slot 0 with no signal at all', async () => {
     stubBrowser({})
     expect(await detectActiveSlot()).eq('0')
+  })
+})
+
+describe('gmail actions', () => {
+  const THREAD_URL = 'https://mail.google.com/mail/u/7/?account_id=me@example.com&message_id=1a186254593d96af&view=conv'
+  // The bits of the real page the sync session is read from.
+  const page = (token: string) =>
+    `<script>var GM_ID_KEY = 'af1be7b5ba';var GLOBALS=[null,null,1008422238,"x"];` +
+    `_setData(["sdpc","${token}"]);BOOTSTRAP=[null,"gmail.pinto-server_20261026.16_p2"]</script>`
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+  function stub(postStatuses: number[]) {
+    let pages = 0
+    const fetchMock = vi.fn(async (_href: string, init?: RequestInit) =>
+      init?.method === 'POST'
+        ? new Response('', { status: postStatuses.shift() ?? 200 })
+        : new Response(page(`tok${++pages}-aaaaaaaaaaaaaaaaaaaa:1793256983817`)),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    return fetchMock
+  }
+  const sentTokens = (fetchMock: ReturnType<typeof stub>) =>
+    fetchMock.mock.calls
+      .filter(([, init]) => init?.method === 'POST')
+      .map(([, init]) => (init!.headers as Record<string, string>)['X-Framework-Xsrf-Token']!.split('-')[0])
+
+  it('reads the token and client header from the Gmail page', () => {
+    const s = parseSyncSession(page('tok-aaaaaaaaaaaaaaaaaaaa:1793256983817'))
+    expect(s.xsrf).eq('tok-aaaaaaaaaaaaaaaaaaaa:1793256983817')
+    const btai = JSON.parse(s.btai)
+    expect([btai[4], btai[7], btai[15]]).toEqual(['af1be7b5ba', 'gmail.pinto-server_20261026.16_p2', 1008422238])
+    expect(() => parseSyncSession('<html></html>')).toThrow('xsrf, ik, build, globalsId')
+  })
+
+  it('marks as read by removing the unread labels through /sync', async () => {
+    // The old /s/?v=or endpoint answered every action with its re-auth page.
+    const fetchMock = stub([200])
+    await markAsRead(THREAD_URL)
+    const [href, init] = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST')!
+    expect(href).toMatch(/^https:\/\/mail\.google\.com\/sync\/u\/7\/i\/s\?/)
+    expect(init!.body).toContain(
+      '["thread-f:1880360958841165487",[null,null,null,null,null,null,[null,["^u","^us"],["msg-f:1880360958841165487"]]]]',
+    )
+  })
+
+  it('retries once with a fresh token, then rejects instead of pretending it worked', async () => {
+    const retried = stub([500, 200])
+    await markAsRead(THREAD_URL.replace('/u/7/', '/u/8/'))
+    expect(sentTokens(retried)).toEqual(['tok1', 'tok2'])
+
+    stub([500, 500])
+    await expect(markAsRead(THREAD_URL.replace('/u/7/', '/u/9/'))).rejects.toThrow('500')
+  })
+
+  it('shares one page fetch between parallel actions', async () => {
+    const fetchMock = stub([200, 200])
+    const url = THREAD_URL.replace('/u/7/', '/u/10/')
+    await Promise.all([markAsRead(url), markAsRead(url)])
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method !== 'POST')).toHaveLength(1)
   })
 })
