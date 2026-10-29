@@ -32,9 +32,11 @@ import type { EmailThread } from '@/lib/StateManager'
 
 function MailItem({
   thread,
+  showAccount,
   onClick,
 }: {
   thread: EmailThread
+  showAccount: boolean
   onClick: () => void
 }) {
   const queryClient = useQueryClient()
@@ -125,6 +127,7 @@ function MailItem({
         <div className="font-bold text-sm truncate">{thread.title}</div>
         {/* Summary */}
         <div className="text-xs text-gray-400 truncate">{thread.summary}</div>
+        {showAccount && <div className="text-xs text-primary truncate">{thread.account}</div>}
       </div>
     </div>
   )
@@ -161,6 +164,9 @@ function Toolbar() {
     }
   }
 
+  const accounts = mailQuery.data?.accounts ?? []
+  const accountLabel = accounts.length === 1 ? accounts[0] : `${accounts.length} accounts`
+
   return (
     <div className="flex items-center px-4 py-2 bg-card shadow-sm border-b border-border gap-2 sticky top-0 z-10">
       {/* Gmail icon */}
@@ -168,7 +174,7 @@ function Toolbar() {
         <img src="/icon/48.png" alt="Gmail Notifier" className="w-6 h-6" />
       </div>
       <span className="font-medium text-foreground flex-1">
-        {mailQuery.data?.email ? `${mailQuery.data.email} (${mailQuery.data.threads.length})` : 'Gmail Notifier'}
+        {accounts.length ? `${accountLabel} (${mailQuery.data!.threads.length})` : 'Gmail Notifier'}
       </span>
       {(mailQuery.data?.threads.length ?? 0) > 0 && (
         <Button
@@ -264,12 +270,15 @@ function MailList({
   threads: EmailThread[]
   onSelectFeed: (thread: EmailThread) => void
 }) {
+  // Only worth the extra line when the list actually mixes accounts.
+  const showAccount = new Set(threads.map((it) => it.account)).size > 1
   return (
     <div className="w-full">
       {threads.map((thread) => (
         <MailItem
           key={thread.url}
           thread={thread}
+          showAccount={showAccount}
           onClick={() => onSelectFeed(thread)}
         />
       ))}
@@ -310,10 +319,10 @@ export function IndexPage() {
           // percentage height to resolve against. Centering directly on
           // this element instead - which does have a real resolved height -
           // sidesteps that entirely, no percentage resolution involved.
-          !mailQuery.data?.email && 'flex flex-col items-center justify-center',
+          !mailQuery.data?.accounts.length && 'flex flex-col items-center justify-center',
         )}
       >
-        {mailQuery.data?.email ? (
+        {mailQuery.data?.accounts.length ? (
           <MailList threads={mailQuery.data.threads} onSelectFeed={onSelectFeed} />
         ) : (
           <a href={'https://mail.google.com/mail/u/0/#inbox'} target="_blank">

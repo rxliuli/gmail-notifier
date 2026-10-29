@@ -87,23 +87,20 @@ export function parseAccountSlot(url: string): string | null {
 
 const ACTIVE_SLOT_KEY = 'activeSlot'
 
-export async function getStoredActiveSlot(): Promise<string> {
+async function getStoredActiveSlot(): Promise<string> {
   const { [ACTIVE_SLOT_KEY]: slot } = await browser.storage.local.get<{ [ACTIVE_SLOT_KEY]?: string }>(ACTIVE_SLOT_KEY)
   return slot ?? '0'
 }
 
-// Returns true when this actually changed the stored slot - background uses
-// that to trigger an immediate refetch on account switches.
-export async function rememberActiveSlot(slot: string): Promise<boolean> {
-  const prev = await getStoredActiveSlot()
-  if (prev === slot) {
-    return false
+// Called on every Gmail sync ping (several a second), so only write when the
+// slot actually changed.
+export async function rememberActiveSlot(slot: string): Promise<void> {
+  if ((await getStoredActiveSlot()) !== slot) {
+    await browser.storage.local.set({ [ACTIVE_SLOT_KEY]: slot })
   }
-  await browser.storage.local.set({ [ACTIVE_SLOT_KEY]: slot })
-  return true
 }
 
-// Which account's inbox should the extension reflect? In order:
+// Which account do "open Gmail" and "compose" go to? In order:
 // 1. The Gmail tab the user most recently had active - the clearest signal
 //    of intent, and the one that makes "I switched accounts in Gmail" just
 //    work. (On Chrome/Firefox the background's sync-ping listener usually
@@ -136,7 +133,7 @@ async function fetchFeedForSlot(slot: string): Promise<RSSInfo | null> {
     credentials: 'include',
   })
   const text = await resp.text()
-  await debugLog('getRSS: response ->', {
+  await debugLog('fetchFeedForSlot: response ->', {
     slot,
     status: resp.status,
     ok: resp.ok,
@@ -149,7 +146,15 @@ async function fetchFeedForSlot(slot: string): Promise<RSSInfo | null> {
   // live, Gmail 302s it straight to u/0's feed (and a fully signed-out
   // session 302s to accounts.google.com). Either way resp.url no longer
   // carries the slot we asked for, which is the only reliable tell.
-  if (!resp.ok || parseAccountSlot(resp.url) !== slot) {
+  //
+  // Only that redirect means "no account here". An HTTP error has to throw
+  // instead: getAllRSS cuts the account list at the first null, so a single
+  // transient 5xx would otherwise look like a sign-out - dropping that
+  // account's threads and re-notifying all of them on the next good poll.
+  if (!resp.ok) {
+    throw new Error(`fetchFeedForSlot: u/${slot} feed -> ${resp.status}`)
+  }
+  if (parseAccountSlot(resp.url) !== slot) {
     return null
   }
   const rss = extractRSS(text)
@@ -168,29 +173,30 @@ async function fetchFeedForSlot(slot: string): Promise<RSSInfo | null> {
   }
 }
 
-export async function getRSS(): Promise<RSSInfo> {
-  let slot = await detectActiveSlot()
-  let rss: RSSInfo | null
-  try {
-    rss = await fetchFeedForSlot(slot)
-  } catch (err) {
-    console.error('getRSS failed', err)
-    throw err
+const ACCOUNT_COUNT_KEY = 'accountCount'
+
+// Every signed-in account's feed, in slot order. Slots are contiguous from 0
+// and an out-of-range one is detectable (fetchFeedForSlot returns null), so
+// fetch the slots seen last time plus one more in parallel and cut at the
+// first miss: a steady-state poll costs one request per account plus a
+// single probe, and a newly signed-in account shows up on the next poll.
+export async function getAllRSS(): Promise<RSSInfo[]> {
+  const { [ACCOUNT_COUNT_KEY]: known = 1 } = await browser.storage.local.get<{ [ACCOUNT_COUNT_KEY]?: number }>(
+    ACCOUNT_COUNT_KEY,
+  )
+  const slots = Array.from({ length: Math.min(known + 1, MAX_ACCOUNT_SLOTS) }, (_, i) => String(i))
+  // Promise.all, not allSettled: any slot failing aborts the whole poll and
+  // leaves the previous state untouched, rather than treating it as gone.
+  const results = await Promise.all(slots.map(fetchFeedForSlot))
+  const firstMiss = results.indexOf(null)
+  const accounts = (firstMiss === -1 ? results : results.slice(0, firstMiss)) as RSSInfo[]
+  if (accounts.length === 0) {
+    throw new Error('getAllRSS: no signed-in Gmail account responded')
   }
-  // The preferred slot can go stale (that account signed out, slots
-  // reshuffled). Slot 0 is the only meaningful blind fallback: Gmail
-  // guarantees the default account occupies it whenever anyone is signed in
-  // at all, so anything beyond 0 can only ever be reached via a real signal
-  // (tab URL / sync ping), never by scanning.
-  if (!rss && slot !== '0') {
-    slot = '0'
-    rss = await fetchFeedForSlot(slot)
+  if (accounts.length !== known) {
+    await browser.storage.local.set({ [ACCOUNT_COUNT_KEY]: accounts.length })
   }
-  if (!rss) {
-    throw new Error('getRSS: no signed-in Gmail account responded')
-  }
-  await rememberActiveSlot(slot)
-  return rss
+  return accounts
 }
 
 interface Attachment {
@@ -650,10 +656,9 @@ export async function openMailInWeb(url: string) {
   await browser.windows.update(target.windowId!, { focused: true })
 }
 
-// The inbox of whichever account the extension is currently showing - i.e.
-// the slot getRSS last fetched successfully.
+// The inbox of whichever account the user is currently using in Gmail.
 export async function getActiveInboxUrl() {
-  return `https://mail.google.com/mail/u/${await getStoredActiveSlot()}/#inbox`
+  return `https://mail.google.com/mail/u/${await detectActiveSlot()}/#inbox`
 }
 
 export async function newEmail() {
@@ -670,7 +675,7 @@ export async function newEmail() {
   }
 
   await browser.windows.create({
-    url: `https://mail.google.com/mail/u/${await getStoredActiveSlot()}/?fs=1&tf=cm`,
+    url: `https://mail.google.com/mail/u/${await detectActiveSlot()}/?fs=1&tf=cm`,
     type: 'popup',
     width: windowWidth,
     height: windowHeight,

@@ -25,7 +25,7 @@ describe('StateManager', () => {
     fakeBrowser.reset()
     api = {
       checkLoginStatus: vi.fn(),
-      getRSS: vi.fn(),
+      getAllRSS: vi.fn(),
       getThreadMail: vi.fn(),
       markAsRead: vi.fn(),
       markAsUnread: vi.fn(),
@@ -54,13 +54,13 @@ describe('StateManager', () => {
     // extractVersion, i.e. it looks like one extracted by an older version and
     // is re-fetched on purpose - see the extraction-version tests.
     api.getThreadMail.mockImplementation(async () => THREAD_DETAILS)
-    api.getRSS.mockImplementation(
+    api.getAllRSS.mockImplementation(
       async () =>
-        ({
+        [{
           email: 'test@test.com',
           modified: '2025-07-30T21:05:12Z',
           feeds: [feed],
-        }) satisfies RSSInfo,
+        }] satisfies RSSInfo[],
     )
     await stateManager.fetchThreads()
     expect(api.getThreadMail).toBeCalledTimes(1)
@@ -72,9 +72,9 @@ describe('StateManager', () => {
   // Should sort threads by modified time
   it('should sort threads by modified time', async () => {
     api.checkLoginStatus.mockImplementation(async () => true)
-    api.getRSS.mockImplementation(
+    api.getAllRSS.mockImplementation(
       async () =>
-        ({
+        [{
           email: 'test@test.com',
           modified: '2025-07-30T21:05:12Z',
           feeds: [
@@ -88,7 +88,7 @@ describe('StateManager', () => {
               url: 'https://mail.google.com/mail/u/0/?account_id=test@test.com&message_id=2381d2747ab8c227&view=conv&extsrc=atom',
             },
           ],
-        }) satisfies RSSInfo,
+        }] satisfies RSSInfo[],
     )
     const stateManager = new StateManager(api)
     await stateManager.fetchThreads()
@@ -100,7 +100,7 @@ describe('StateManager', () => {
     const stateManager = new StateManager(api)
     await stateManager.fetchThreads()
     expect(api.checkLoginStatus).not.toBeCalled()
-    expect(api.getRSS).not.toBeCalled()
+    expect(api.getAllRSS).not.toBeCalled()
     onLineSpy.mockRestore()
   })
 
@@ -111,15 +111,15 @@ describe('StateManager', () => {
     stateManager.on(listener)
     await stateManager.fetchThreads()
     expect(stateManager.isLoggedIn).toBe(false)
-    expect(api.getRSS).not.toBeCalled()
+    expect(api.getAllRSS).not.toBeCalled()
     expect(listener).toBeCalledTimes(1)
   })
 
   describe('getNewThreads / getUnreadThreads', () => {
     async function seedOneThread(stateManager: StateManager) {
       api.checkLoginStatus.mockImplementation(async () => true)
-      api.getRSS.mockImplementation(
-        async () => ({ email: 'test@test.com', modified: feed.modified, feeds: [feed] }) satisfies RSSInfo,
+      api.getAllRSS.mockImplementation(
+        async () => [{ email: 'test@test.com', modified: feed.modified, feeds: [feed] }] satisfies RSSInfo[],
       )
       api.getThreadMail.mockImplementation(async () => THREAD_DETAILS)
       await stateManager.fetchThreads()
@@ -161,8 +161,8 @@ describe('StateManager', () => {
   describe('mutating actions', () => {
     async function seedOneThread(stateManager: StateManager) {
       api.checkLoginStatus.mockImplementation(async () => true)
-      api.getRSS.mockImplementation(
-        async () => ({ email: 'test@test.com', modified: feed.modified, feeds: [feed] }) satisfies RSSInfo,
+      api.getAllRSS.mockImplementation(
+        async () => [{ email: 'test@test.com', modified: feed.modified, feeds: [feed] }] satisfies RSSInfo[],
       )
       api.getThreadMail.mockImplementation(async () => THREAD_DETAILS)
       await stateManager.fetchThreads()
@@ -186,7 +186,7 @@ describe('StateManager', () => {
       await stateManager.markAsRead(feed.url)
       // fetchThreads() is fired-and-forgotten from the rejection handler; flush microtasks.
       await new Promise((r) => setTimeout(r, 0))
-      expect(api.getRSS).toBeCalledTimes(2)
+      expect(api.getAllRSS).toBeCalledTimes(2)
     })
 
     it('markAsRead still resolves and keeps the mutation when a listener throws', async () => {
@@ -254,8 +254,8 @@ describe('StateManager', () => {
         ...feed,
         url: 'https://mail.google.com/mail/u/0/?account_id=test@test.com&message_id=2381d2747ab8c227&view=conv&extsrc=atom',
       }
-      api.getRSS.mockImplementation(
-        async () => ({ email: 'test@test.com', modified: feed.modified, feeds: [feed, secondFeed] }) satisfies RSSInfo,
+      api.getAllRSS.mockImplementation(
+        async () => [{ email: 'test@test.com', modified: feed.modified, feeds: [feed, secondFeed] }] satisfies RSSInfo[],
       )
       api.getThreadMail.mockImplementation(async () => THREAD_DETAILS)
       await stateManager.fetchThreads()
@@ -272,8 +272,8 @@ describe('StateManager', () => {
         ...feed,
         url: 'https://mail.google.com/mail/u/0/?account_id=test@test.com&message_id=2381d2747ab8c227&view=conv&extsrc=atom',
       }
-      api.getRSS.mockImplementation(
-        async () => ({ email: 'test@test.com', modified: feed.modified, feeds: [feed, secondFeed] }) satisfies RSSInfo,
+      api.getAllRSS.mockImplementation(
+        async () => [{ email: 'test@test.com', modified: feed.modified, feeds: [feed, secondFeed] }] satisfies RSSInfo[],
       )
       api.getThreadMail.mockImplementation(async () => THREAD_DETAILS)
       await stateManager.fetchThreads()
@@ -287,8 +287,8 @@ describe('StateManager', () => {
   describe('notifiedEmails persistence', () => {
     async function seedOneThread(stateManager: StateManager) {
       api.checkLoginStatus.mockImplementation(async () => true)
-      api.getRSS.mockImplementation(
-        async () => ({ email: 'test@test.com', modified: feed.modified, feeds: [feed] }) satisfies RSSInfo,
+      api.getAllRSS.mockImplementation(
+        async () => [{ email: 'test@test.com', modified: feed.modified, feeds: [feed] }] satisfies RSSInfo[],
       )
       api.getThreadMail.mockImplementation(async () => THREAD_DETAILS)
       await stateManager.fetchThreads()
@@ -334,44 +334,59 @@ describe('StateManager', () => {
     })
   })
 
-  describe('account switching', () => {
-    it('replaces the previous account threads instead of merging them into a mixed inbox', async () => {
+  describe('multiple accounts', () => {
+    let bFeed: Feed
+    beforeEach(() => {
       api.checkLoginStatus.mockImplementation(async () => true)
       api.getThreadMail.mockImplementation(async () => THREAD_DETAILS)
       api.markAsRead.mockImplementation(async () => {})
-      const stateManager = new StateManager(api)
-
-      // Account A, with one thread the user has viewed - viewed threads are
-      // exactly the ones the merge filter would otherwise carry across.
-      api.getRSS.mockImplementation(
-        async () => ({ email: 'a@test.com', modified: feed.modified, feeds: [feed] }) satisfies RSSInfo,
-      )
-      await stateManager.fetchThreads()
-      await stateManager.viewed(feed.url)
-
-      // Switch to account B.
-      const bFeed: Feed = {
+      bFeed = {
         ...feed,
         url: 'https://mail.google.com/mail/u/1?account_id=b@test.com&message_id=b111&view=conv&extsrc=atom',
       }
-      api.getRSS.mockImplementation(
-        async () => ({ email: 'b@test.com', modified: feed.modified, feeds: [bFeed] }) satisfies RSSInfo,
+      api.getAllRSS.mockImplementation(
+        async () =>
+          [
+            { email: 'a@test.com', modified: feed.modified, feeds: [feed] },
+            { email: 'b@test.com', modified: feed.modified, feeds: [bFeed] },
+          ] satisfies RSSInfo[],
+      )
+    })
+
+    it('merges every account into one list, each thread tagged with its account', async () => {
+      const stateManager = new StateManager(api)
+      await stateManager.fetchThreads()
+
+      expect(stateManager.accounts).toEqual(['a@test.com', 'b@test.com'])
+      expect(stateManager.threads.map((it) => [it.url, it.account])).toEqual([
+        [feed.url, 'a@test.com'],
+        [bFeed.url, 'b@test.com'],
+      ])
+      expect(stateManager.getUnreadThreads()).toHaveLength(2)
+    })
+
+    it("drops a signed-out account's threads, even viewed ones", async () => {
+      const stateManager = new StateManager(api)
+      await stateManager.fetchThreads()
+      // Viewed threads are exactly the ones the merge filter would otherwise
+      // keep after they leave the feed.
+      await stateManager.viewed(bFeed.url)
+
+      api.getAllRSS.mockImplementation(
+        async () => [{ email: 'a@test.com', modified: feed.modified, feeds: [feed] }] satisfies RSSInfo[],
       )
       await stateManager.fetchThreads()
 
-      expect(stateManager.email).eq('b@test.com')
-      expect(stateManager.threads.map((it) => it.url)).toEqual([bFeed.url])
-      // B's threads are unviewed and eligible for notification - A's viewed
-      // state must not leak over.
-      expect(stateManager.getUnreadThreads().map((it) => it.url)).toEqual([bFeed.url])
+      expect(stateManager.accounts).toEqual(['a@test.com'])
+      expect(stateManager.threads.map((it) => it.url)).toEqual([feed.url])
     })
   })
 
   describe('concurrent actions during an in-flight fetch', () => {
     async function seedOneThread(stateManager: StateManager) {
       api.checkLoginStatus.mockImplementation(async () => true)
-      api.getRSS.mockImplementation(
-        async () => ({ email: 'test@test.com', modified: feed.modified, feeds: [feed] }) satisfies RSSInfo,
+      api.getAllRSS.mockImplementation(
+        async () => [{ email: 'test@test.com', modified: feed.modified, feeds: [feed] }] satisfies RSSInfo[],
       )
       api.getThreadMail.mockImplementation(async () => THREAD_DETAILS)
       await stateManager.fetchThreads()
@@ -438,8 +453,8 @@ describe('StateManager', () => {
     it('clears viewed state and force-refetches all threads', async () => {
       const stateManager = new StateManager(api)
       api.checkLoginStatus.mockImplementation(async () => true)
-      api.getRSS.mockImplementation(
-        async () => ({ email: 'test@test.com', modified: feed.modified, feeds: [feed] }) satisfies RSSInfo,
+      api.getAllRSS.mockImplementation(
+        async () => [{ email: 'test@test.com', modified: feed.modified, feeds: [feed] }] satisfies RSSInfo[],
       )
       api.getThreadMail.mockImplementation(async () => THREAD_DETAILS)
       await stateManager.fetchThreads()
@@ -455,8 +470,8 @@ describe('StateManager', () => {
   describe('extraction version', () => {
     async function seedOneThread(stateManager: StateManager) {
       api.checkLoginStatus.mockImplementation(async () => true)
-      api.getRSS.mockImplementation(
-        async () => ({ email: 'test@test.com', modified: feed.modified, feeds: [feed] }) satisfies RSSInfo,
+      api.getAllRSS.mockImplementation(
+        async () => [{ email: 'test@test.com', modified: feed.modified, feeds: [feed] }] satisfies RSSInfo[],
       )
       api.getThreadMail.mockImplementation(async () => THREAD_DETAILS)
       await stateManager.fetchThreads()

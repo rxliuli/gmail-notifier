@@ -29,6 +29,7 @@ function makeThread(messageCount: number, overrides: Partial<EmailThread> = {}):
     url: `https://mail.google.com/mail/u/0/?account_id=test@test.com&message_id=abc${messageCount}&view=conv&extsrc=atom`,
     modified: '2025-06-03T05:42:00.000Z',
     author: { name: 'Test', email: 'test@test.com' },
+    account: 'test@test.com',
     subject: 'Test Subject',
     messageCount,
     messages,

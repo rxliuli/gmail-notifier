@@ -4,7 +4,7 @@ import {
   checkLoginStatus,
   deleteMail,
   getActiveInboxUrl,
-  getRSS,
+  getAllRSS,
   getThreadMail,
   markAsRead,
   markAsSpam,
@@ -84,7 +84,7 @@ export default defineBackground(async () => {
 async function start() {
   const stateManager = new StateManager({
     checkLoginStatus,
-    getRSS,
+    getAllRSS,
     getThreadMail,
     markAsRead,
     archive: async (url) => {
@@ -196,11 +196,11 @@ async function start() {
       const now = Date.now()
       // The sync URLs themselves carry the account slot
       // (https://mail.google.com/sync/u/1/i/s...) - a free, real-time signal
-      // for which account the user is actively using. Only pings from the
-      // *active* tab count: with two Gmail tabs on different accounts, both
-      // long-poll continuously, and without that filter they'd fight over
-      // the slot on every ping. An account switch busts the cooldown - the
-      // whole point is reflecting it right away, not up to 10s later.
+      // for which account the user is actively using, remembered so "open
+      // Gmail" and "compose" go there. Only pings from the *active* tab count:
+      // with two Gmail tabs on different accounts, both long-poll
+      // continuously, and without that filter they'd fight over the slot on
+      // every ping.
       void (async () => {
         const slot = parseAccountSlot(details.url)
         if (slot === null || details.tabId < 0) {
@@ -210,11 +210,7 @@ async function start() {
         if (!tab?.active) {
           return
         }
-        if (await rememberActiveSlot(slot)) {
-          await debugLog('background: active Gmail account switched to slot', slot)
-          lastWebRequestFetchAt = Date.now()
-          await stateManager.fetchThreads()
-        }
+        await rememberActiveSlot(slot)
       })()
       if (now - lastWebRequestFetchAt < WEBREQUEST_FETCH_COOLDOWN_MS) {
         return {}

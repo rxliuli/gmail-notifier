@@ -38,9 +38,9 @@ describe('IndexPage', () => {
     // the fetch and writes fresh state to storage, but never emits any
     // popupMessager message - the click handler must invalidate/pull the
     // fresh state itself to pass.
-    await browser.storage.local.set({ email: 'me@example.com', threads: [makeThread('a')] })
+    await browser.storage.local.set({ accounts: ['me@example.com'], threads: [makeThread('a')] })
     vi.spyOn(bgMessager, 'sendMessage').mockImplementation(async () => {
-      await browser.storage.local.set({ email: 'me@example.com', threads: [makeThread('b')] })
+      await browser.storage.local.set({ accounts: ['me@example.com'], threads: [makeThread('b')] })
     })
 
     const queryClient = new QueryClient()

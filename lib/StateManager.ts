@@ -2,11 +2,14 @@ import { sortBy, uniqBy } from 'es-toolkit'
 import { CURRENT_EXTRACT_VERSION, type Feed, type RSSInfo, type ThreadMail } from './api/gmail'
 import { debugLog } from './debugLog'
 
-export interface EmailThread extends Feed, ThreadMail {}
+export interface EmailThread extends Feed, ThreadMail {
+  // Address of the account whose inbox this thread is in.
+  account: string
+}
 
 export interface GmailApi {
   checkLoginStatus: () => Promise<boolean>
-  getRSS: () => Promise<RSSInfo>
+  getAllRSS: () => Promise<RSSInfo[]>
   getThreadMail: (url: string) => Promise<ThreadMail>
   markAsRead: (url: string) => Promise<void>
   markAsUnread: (url: string) => Promise<void>
@@ -21,7 +24,8 @@ export interface GmailApi {
 // https://stackoverflow.com/questions/66618136/persistent-service-worker-in-chrome-extension#:~:text=%E2%AD%95%20Bug%20exploit%20in%20Chrome%20110%2B
 export class StateManager {
   isLoggedIn: boolean = false
-  email: string | null = null
+  // Signed-in accounts, in Gmail's slot order.
+  accounts: string[] = []
   threads: EmailThread[] = []
   notifiedEmails: Set<string> = new Set()
   viewedEmails: Set<string> = new Set()
@@ -45,7 +49,7 @@ export class StateManager {
     // popup would rather show last-known state than nothing.
     await browser.storage.local.set({
       isLoggedIn: this.isLoggedIn,
-      email: this.email,
+      accounts: this.accounts,
       threads: this.threads,
     })
     for (const cb of this.listeners) {
@@ -73,7 +77,7 @@ export class StateManager {
     // marked unread again in Gmail itself be treated as new again too.
     this.notifiedEmails = new Set(this.threads.map((it) => it.url))
     // A separate write, after the replace above: this has to reflect *this*
-    // batch's notifiedEmails, but the isLoggedIn/email/threads write above
+    // batch's notifiedEmails, but the isLoggedIn/accounts/threads write above
     // has to happen before the listeners loop (it pushes a 'refreshPopup'
     // message - the popup re-reads storage.local right after receiving it,
     // so that data must already be current by then). notifiedEmails isn't
@@ -115,19 +119,16 @@ export class StateManager {
         await this.notify()
         return
       }
-      const rss = await this.api.getRSS()
-      await debugLog('fetchThreads: getRSS ->', { email: rss.email, feedCount: rss.feeds.length })
-      if (this.email !== null && this.email !== rss.email) {
-        // Account switch. Without this reset, the merge below would carry the
-        // previous account's threads over (its viewed threads survive the
-        // filter - their URLs just never match the new feed) and present a
-        // mixed inbox of two accounts as one list.
-        await debugLog('fetchThreads: account changed ->', rss.email)
-        this.threads = []
-        this.viewedEmails.clear()
-        this.notifiedEmails.clear()
-      }
-      this.email = rss.email
+      const rssList = await this.api.getAllRSS()
+      await debugLog(
+        'fetchThreads: getAllRSS ->',
+        rssList.map((rss) => ({ email: rss.email, feedCount: rss.feeds.length })),
+      )
+      this.accounts = rssList.map((rss) => rss.email)
+      // Thread URLs carry the account (slot and account_id), so one merged
+      // list never confuses two accounts' threads. Feed entries are tagged
+      // with their account here so the popup can label them.
+      const feeds = rssList.flatMap((rss) => rss.feeds.map((it) => ({ ...it, account: rss.email })))
       // Assembled in locals and written to this.threads only once complete:
       // the getThreadMail() calls below take hundreds of ms, and any action
       // arriving in that window calls notify(), which persists this.threads
@@ -175,12 +176,14 @@ export class StateManager {
               // feed entries - unavoidable, there is nothing left to re-fetch it
               // from.
               t.extractVersion === CURRENT_EXTRACT_VERSION &&
+              // A signed-out account's threads go, viewed or not.
+              this.accounts.includes(t.account) &&
               // Keep read emails
               (this.viewedEmails.has(t.url) ||
                 // Keep unchanged emails
-                rss.feeds.find((it) => it.url === t.url)?.modified === t.modified),
+                feeds.find((it) => it.url === t.url)?.modified === t.modified),
           )
-      const newFeeds = rss.feeds.filter((it) => !keptThreads.find((t) => t.url === it.url))
+      const newFeeds = feeds.filter((it) => !keptThreads.find((t) => t.url === it.url))
       const newThreads = await Promise.all(
         newFeeds.map(async (it) => {
           const details = await this.api.getThreadMail(it.url)

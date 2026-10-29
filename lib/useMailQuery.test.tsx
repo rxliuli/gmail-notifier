@@ -11,7 +11,7 @@ function Probe() {
   const query = useMailQuery()
   return (
     <div data-testid="probe">
-      {JSON.stringify({ email: query.data?.email ?? null, threads: query.data?.threads ?? [] })}
+      {JSON.stringify({ accounts: query.data?.accounts ?? [], threads: query.data?.threads ?? [] })}
     </div>
   )
 }
@@ -23,7 +23,7 @@ describe('useMailQuery', () => {
 
   it('reads whatever background last wrote to storage.local', async () => {
     const threads = [{ url: 'https://mail.google.com/1' }] as any
-    await fakeBrowser.storage.local.set({ email: 'me@example.com', threads })
+    await fakeBrowser.storage.local.set({ accounts: ['me@example.com'], threads })
     const screen = await render(
       <QueryClientProvider client={new QueryClient()}>
         <Probe />
@@ -31,10 +31,10 @@ describe('useMailQuery', () => {
     )
     await expect
       .element(screen.getByTestId('probe'))
-      .toHaveTextContent(JSON.stringify({ email: 'me@example.com', threads }))
+      .toHaveTextContent(JSON.stringify({ accounts: ['me@example.com'], threads }))
   })
 
-  it('falls back to null/empty when logged out or storage is empty', async () => {
+  it('falls back to empty when logged out or storage is empty', async () => {
     const screen = await render(
       <QueryClientProvider client={new QueryClient()}>
         <Probe />
@@ -42,7 +42,7 @@ describe('useMailQuery', () => {
     )
     await expect
       .element(screen.getByTestId('probe'))
-      .toHaveTextContent(JSON.stringify({ email: null, threads: [] }))
+      .toHaveTextContent(JSON.stringify({ accounts: [], threads: [] }))
   })
 
   it('invalidating mailQueryKey re-reads storage instead of relying on a manual pull', async () => {
@@ -52,14 +52,14 @@ describe('useMailQuery', () => {
         <Probe />
       </QueryClientProvider>,
     )
-    await expect.element(screen.getByTestId('probe')).toHaveTextContent('null')
+    await expect.element(screen.getByTestId('probe')).toHaveTextContent('"accounts":[]')
 
     const threads = [{ url: 'https://mail.google.com/1' }] as any
-    await fakeBrowser.storage.local.set({ email: 'me@example.com', threads })
+    await fakeBrowser.storage.local.set({ accounts: ['me@example.com'], threads })
     await queryClient.invalidateQueries({ queryKey: mailQueryKey })
 
     await expect
       .element(screen.getByTestId('probe'))
-      .toHaveTextContent(JSON.stringify({ email: 'me@example.com', threads }))
+      .toHaveTextContent(JSON.stringify({ accounts: ['me@example.com'], threads }))
   })
 })

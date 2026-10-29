@@ -5,7 +5,7 @@ import {
   formatDate,
   getOpenWebLink,
   getGmailAt,
-  getRSS,
+  getAllRSS,
   detectActiveSlot,
   parseAccountSlot,
   parseAddressField,
@@ -316,8 +316,14 @@ describe('multi-account slot resolution', () => {
     return `<?xml version="1.0" encoding="UTF-8"?><feed version="0.3" xmlns="http://purl.org/atom/ns#"><title>Gmail - Inbox for ${email}</title><tagline>New messages</tagline><fullcount>${entries.length}</fullcount><link rel="alternate" href="https://mail.google.com/mail/u/0" type="text/html"/><modified>2025-06-03T09:23:46Z</modified>${entryXml}</feed>`
   }
 
-  function stubBrowser(options: { activeSlot?: string; tabs?: { url: string; active?: boolean; lastAccessed?: number }[] }) {
-    const data: Record<string, unknown> = options.activeSlot !== undefined ? { activeSlot: options.activeSlot } : {}
+  function stubBrowser(options: {
+    activeSlot?: string
+    accountCount?: number
+    tabs?: { url: string; active?: boolean; lastAccessed?: number }[]
+  }) {
+    const data: Record<string, unknown> = {}
+    if (options.activeSlot !== undefined) data['activeSlot'] = options.activeSlot
+    if (options.accountCount !== undefined) data['accountCount'] = options.accountCount
     vi.stubGlobal('browser', {
       storage: {
         local: {
@@ -351,39 +357,79 @@ describe('multi-account slot resolution', () => {
     }
   }
 
-  it('fetches the remembered slot and rewrites entry urls onto it', async () => {
+  // Two accounts signed in: u/0 and u/1 serve their own feeds, anything
+  // higher 302s to u/0 (confirmed live - resp.url is the only tell).
+  function twoAccountFetch() {
+    return vi.fn(async (url: string) => {
+      const slot = parseAccountSlot(url)!
+      if (slot === '0') return feedResponse('0', '0', feedXml('a@gmail.com', [{ messageId: 'a1' }]))
+      if (slot === '1') return feedResponse('1', '1', feedXml('b@gmail.com', [{ messageId: 'b1', entrySlot: '0' }]))
+      return feedResponse(slot, '0', feedXml('a@gmail.com', []))
+    })
+  }
+
+  it('fetches every signed-in account and rewrites entry urls onto their slot', async () => {
     // Confirmed live: the feed's entry links hardcode /u/0 no matter which
     // slot served the feed - without the rewrite, actions on a non-default
     // account would target account 0.
-    const data = stubBrowser({ activeSlot: '1' })
-    const fetchMock = vi.fn(async (url: string) =>
-      feedResponse('1', '1', feedXml('test@gmail.com', [{ messageId: 'abc', entrySlot: '0' }])),
-    )
-    vi.stubGlobal('fetch', fetchMock)
+    stubBrowser({ accountCount: 2 })
+    vi.stubGlobal('fetch', twoAccountFetch())
 
-    const rss = await getRSS()
-    expect(fetchMock.mock.calls[0]![0]).toContain('/mail/u/1/feed/atom')
-    expect(rss.email).eq('test@gmail.com')
-    expect(rss.feeds[0]!.url).toContain('/u/1?account_id=')
-    expect(data['activeSlot']).eq('1')
+    const accounts = await getAllRSS()
+    expect(accounts.map((it) => it.email)).toEqual(['a@gmail.com', 'b@gmail.com'])
+    expect(accounts[1]!.feeds[0]!.url).toContain('/u/1?account_id=')
   })
 
-  it('falls back to slot 0 when the remembered slot has signed out', async () => {
-    // Confirmed live: requesting an out-of-range slot 302s to u/0's feed
-    // rather than erroring - resp.url is the only tell.
-    const data = stubBrowser({ activeSlot: '2' })
-    const fetchMock = vi.fn(async (url: string) => {
-      const slot = parseAccountSlot(url)!
-      return slot === '2'
-        ? feedResponse('2', '0', feedXml('primary@gmail.com', []))
-        : feedResponse('0', '0', feedXml('primary@gmail.com', [{ messageId: 'xyz' }]))
-    })
+  it('discovers a newly signed-in account one slot at a time', async () => {
+    const data = stubBrowser({})
+    const fetchMock = twoAccountFetch()
     vi.stubGlobal('fetch', fetchMock)
 
-    const rss = await getRSS()
-    expect(rss.email).eq('primary@gmail.com')
+    // Nothing remembered yet: probes u/0 and u/1, both answer.
+    expect((await getAllRSS()).map((it) => it.email)).toEqual(['a@gmail.com', 'b@gmail.com'])
     expect(fetchMock).toBeCalledTimes(2)
-    expect(data['activeSlot']).eq('0')
+    expect(data['accountCount']).eq(2)
+
+    // Next poll probes one past the known count (u/2), which misses.
+    expect(await getAllRSS()).toHaveLength(2)
+    expect(fetchMock).toBeCalledTimes(5)
+  })
+
+  it('forgets an account that signed out', async () => {
+    const data = stubBrowser({ accountCount: 2 })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        const slot = parseAccountSlot(url)!
+        return feedResponse(slot, '0', feedXml('a@gmail.com', []))
+      }),
+    )
+
+    expect((await getAllRSS()).map((it) => it.email)).toEqual(['a@gmail.com'])
+    expect(data['accountCount']).eq(1)
+  })
+
+  it("fails the poll on an HTTP error instead of treating that account as signed out", async () => {
+    const data = stubBrowser({ accountCount: 2 })
+    const fetchMock = twoAccountFetch()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) =>
+        parseAccountSlot(url) === '1' ? { ...(await fetchMock(url)), ok: false, status: 503 } : fetchMock(url),
+      ),
+    )
+
+    await expect(getAllRSS()).rejects.toThrow('503')
+    expect(data['accountCount']).eq(2)
+  })
+
+  it('throws when no account is signed in', async () => {
+    stubBrowser({})
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => feedResponse(parseAccountSlot(url)!, null, '')),
+    )
+    await expect(getAllRSS()).rejects.toThrow('no signed-in Gmail account')
   })
 
   it('prefers the most recently active Gmail tab over the stored slot', async () => {

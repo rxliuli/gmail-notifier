@@ -3,7 +3,7 @@ import type { EmailThread } from './StateManager'
 
 // Single source of truth for "what does background last know" on the popup
 // side. Background (StateManager.notify()) is the only writer of
-// storage.local's email/threads; every reader here goes through this one
+// storage.local's accounts/threads; every reader here goes through this one
 // query instead of each call site hand-rolling its own read-after-action.
 //
 // This deliberately doesn't try to trigger the actual remote Gmail fetch -
@@ -21,11 +21,11 @@ export const mailQueryKey = ['mail'] as const
 // mailQuery.data is already warm by the time DetailPage's first render
 // happens, instead of that render seeing an empty/loading state first.
 export async function fetchMailQuery() {
-  const { email, threads } = await browser.storage.local.get<{
-    email: string | null
+  const { accounts, threads } = await browser.storage.local.get<{
+    accounts: string[]
     threads: EmailThread[]
-  }>(['email', 'threads'])
-  return { email: email ?? null, threads: threads ?? [] }
+  }>(['accounts', 'threads'])
+  return { accounts: accounts ?? [], threads: threads ?? [] }
 }
 
 export function useMailQuery() {
