@@ -232,9 +232,8 @@ async function start() {
     },
   )
 
-  // Firefox stamps the extension's action POST with Origin: moz-extension://…,
-  // and Gmail answers a cross-site action with its re-auth page instead of
-  // applying it. Chrome's extension requests pass, so this is Firefox only.
+  // Firefox stamps the extension's action POST with Origin: moz-extension://…;
+  // present it as Gmail's own, the only form the write API was seen to accept.
   if (import.meta.env.FIREFOX) {
     const ownOrigin = new URL(browser.runtime.getURL('/')).origin
     browser.webRequest.onBeforeSendHeaders.addListener(
@@ -249,23 +248,13 @@ async function start() {
           if (name === 'sec-fetch-site') return { name: h.name, value: 'same-origin' }
           return h
         })
-        // Names only for cookies: enough to see whether the session ones go out.
-        void debugLog(
-          'gmailAction: request headers ->',
-          (details.requestHeaders ?? []).map((h) =>
-            h.name.toLowerCase() === 'cookie'
-              ? `cookie: ${(h.value ?? '').split('; ').map((c) => c.split('=')[0]).join(',')}`
-              : /^(origin|referer|sec-fetch-)/i.test(h.name)
-                ? `${h.name}: ${h.value}`
-                : h.name,
-          ),
-        )
         return { requestHeaders: headers }
       },
-      { urls: ['https://mail.google.com/mail/u/*/s/*'] },
+      { urls: ['https://mail.google.com/sync/u/*/i/s*'] },
       ['blocking', 'requestHeaders'],
     )
   }
+
 
   // listen to message
   bgMessager.onMessage('refreshThreads', () => stateManager.refresh())

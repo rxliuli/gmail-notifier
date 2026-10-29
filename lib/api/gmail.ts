@@ -514,35 +514,82 @@ export async function getIk(n: string): Promise<string | null> {
   return next(page)
 }
 
-export async function getAt(n: string): Promise<string | null> {
-  // Read fresh every time, never cached: Gmail rotates GMAIL_AT, and a stale
-  // one makes every action silently do nothing.
-  const at = await getGmailAt(n)
-  if (at) {
-    return at
-  }
+// What Gmail's /sync write API checks besides the session cookies, scraped
+// from the Gmail page. The old /mail/u/N/s/?v=or endpoint answers every
+// action with a redirect to its re-auth page, in any browser.
+interface SyncSession {
+  xsrf: string
+  btai: string
+}
+const syncSessionCache = new Map<string, SyncSession>()
 
-  // fallback
-  const resp = await fetch(`https://mail.google.com/mail/u/${n}/h/`, {
+export function parseSyncSession(html: string): SyncSession {
+  const fields = {
+    xsrf: html.match(/"([\w-]{20,}:\d{13})"/)?.[1],
+    ik: html.match(/GM_ID_KEY\s*=\s*'([^']+)'/)?.[1],
+    build: html.match(/"(gmail\.[\w-]+_\d{8}\.\d+_p\d+)"/)?.[1],
+    globalsId: html.match(/var GLOBALS=\[null,null,(\d+)/)?.[1],
+  }
+  const missing = Object.keys(fields).filter((k) => !fields[k as keyof typeof fields])
+  if (missing.length) {
+    throw new Error(`sync session: page has no ${missing.join(', ')}`)
+  }
+  // X-Gmail-BTAI, the web app's description of itself; without it every write
+  // is a 500. Positions copied from a captured request, minus its feature
+  // flags (index 2) and history counters, which Gmail doesn't need.
+  const btai = [null, null, null, null, fields.ik, null, 25, fields.build, 1, 5, '',
+    -new Date().getTimezoneOffset() * 60_000, Intl.DateTimeFormat().resolvedOptions().timeZone,
+    null, null, Number(fields.globalsId), '', '', null, null, null]
+  return { xsrf: fields.xsrf!, btai: JSON.stringify(btai) }
+}
+
+async function getSyncSession(n: string, fresh = false): Promise<SyncSession> {
+  const cached = syncSessionCache.get(n)
+  if (cached && !fresh) {
+    return cached
+  }
+  const resp = await fetch(`https://mail.google.com/mail/u/${n}/`, { credentials: 'include' })
+  const session = parseSyncSession(await resp.text())
+  syncSessionCache.set(n, session)
+  return session
+}
+
+// Gmail's system labels; ^us is removed together with ^u by Gmail itself.
+const LABEL_CHANGES: Record<string, [add: string[] | null, remove: string[] | null]> = {
+  rd: [null, ['^u', '^us']],
+  ur: [['^u'], null],
+  'rc_^i': [null, ['^i']],
+  sp: [['^s'], ['^i']],
+  tr: [['^k'], ['^i']],
+  st: [['^t'], null],
+  xst: [null, ['^t']],
+}
+
+// The label-change write Gmail's web app sends, reduced to what it needs.
+// The feed's hex thread id, in decimal, also names the thread's first message.
+export function syncLabelBody(thread: string, add: string[] | null, remove: string[] | null) {
+  const id = BigInt('0x' + thread).toString()
+  const now = Date.now()
+  return JSON.stringify([
+    null,
+    [[[1, [`thread-f:${id}`, [null, null, null, null, null, null, [add, remove, [`msg-f:${id}`]]]]]]],
+    [1, null, null, null, [null, 0], null, 1],
+    [now, 1, now, 0, 82],
+    2,
+  ])
+}
+
+function postSync(n: string, body: string, session: SyncSession) {
+  return fetch(`https://mail.google.com/sync/u/${n}/i/s?hl=en&c=1&rt=r&pt=ji`, {
+    method: 'POST',
     credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Framework-Xsrf-Token': session.xsrf,
+      'X-Gmail-BTAI': session.btai,
+    },
+    body,
   })
-  if (!resp.ok) {
-    throw Error('core.js -> at -> ' + resp.status)
-  }
-  const content = await resp.text()
-  const doc = parse(content)
-  const e = querySelector('a[href*="at="]', doc)
-  const input = querySelector('[name="at"]', doc)
-  if (e) {
-    const args = new URLSearchParams(getAttribute(e, 'href')?.split('?')[1])
-    if (args.has('at')) {
-      return args.get('at')
-    }
-  }
-  if (input && getAttribute(input, 'value') && getAttribute(input, 'value') !== 'null') {
-    return getAttribute(input, 'value')!
-  }
-  throw Error('core.js -> at (h); Try to open Gmail in a browser tab to set the cookie')
 }
 
 // Email operation related
@@ -550,87 +597,23 @@ async function gmailAction({ url, cmd, prefs = {} }: { url: string; cmd: string;
   const info = extractGmailInfo(url)
   if (!info) throw Error('no_links')
   const { n, thread } = info
-  const at = await getAt(n)
-  if (!at) throw Error('getAt failed')
-  const ik = await getIk(n)
-  if (!ik) throw Error('getIk failed')
-
-  const action: any = {
-    command: 'l:all',
-    labels: [],
-    ids: [],
+  const change = LABEL_CHANGES[cmd]
+  if (!change) throw Error('action_not_supported: ' + cmd)
+  if (cmd === 'rc_^i' && prefs.doReadOnArchive) {
+    await gmailAction({ url, cmd: 'rd', prefs })
   }
-  if (cmd === 'rd') {
-    // mark as read
-    action.code = 3
-  } else if (cmd === 'ur') {
-    // mark as unread
-    action.code = 2
-  } else if (cmd === 'rc_^i' || cmd === 'rc_Inbox') {
-    // archive
-    action.code = 1
-    if (prefs.doReadOnArchive) {
-      await gmailAction({ url, cmd: 'rd', prefs })
-    }
-  } else if (cmd === 'sp' || cmd === 'rc_Spam') {
-    // report spam
-    action.code = 7
-  } else if (cmd === 'tr') {
-    // trash
-    action.code = 9
-  } else if (cmd === 'st') {
-    // star
-    action.code = 5
-  } else if (cmd === 'xst') {
-    // remove star
-    action.code = 6
+  const body = syncLabelBody(thread, ...change)
+  let resp = await postSync(n, body, await getSyncSession(n))
+  if (!resp.ok) {
+    // The page's token expires; retry once with a freshly scraped one.
+    resp = await postSync(n, body, await getSyncSession(n, true))
   }
-  if (!action.code) throw Error('action_not_supported: ' + cmd)
-
-  const body = new FormData()
-  body.append(
-    's_jr',
-    JSON.stringify([
-      null,
-      [
-        [null, null, null, [null, action.code, thread, thread, action.command, [], action.labels, action.ids]],
-        [null, null, null, null, null, null, [null, true, false]],
-        [null, null, null, null, null, null, [null, true, false]],
-      ],
-      2,
-      null,
-      null,
-      null,
-      ik,
-    ]),
-  )
-
-  const href = `https://mail.google.com/mail/u/${n}/s/?v=or&ik=${ik}&at=${at}&subui=chrome&hl=en&ts=` + Date.now()
-  const resp = await fetch(href, {
-    method: 'POST',
-    credentials: 'include',
-    body,
-  })
   // A rejected action must surface, or the mail vanishes from the list and
   // silently comes back on the next poll.
-  const text = await resp.text()
-  await debugLog('gmailAction: response ->', { cmd, slot: n, status: resp.status, bodyPreview: text.slice(0, 200) })
   if (!resp.ok) {
+    await debugLog('gmailAction: rejected ->', { cmd, slot: n, status: resp.status, body: (await resp.text()).slice(0, 200) })
     throw new Error(`gmailAction ${cmd}: ${resp.status}`)
   }
-  // Gmail answers a request it won't honour with 200 and a script that
-  // redirects to its re-auth page.
-  if (text.includes('/spreauth')) {
-    await debugLog('gmailAction: reauth, google.com cookies (name:sameSite:path) ->', await describeCookies())
-    throw new Error(`gmailAction ${cmd}: Gmail asked to re-authenticate`)
-  }
-}
-
-// Names and flags only, never values: enough to see which session cookies
-// the extension's requests can and cannot carry.
-async function describeCookies() {
-  const cookies = await browser.cookies.getAll({ domain: 'google.com' })
-  return cookies.map((c) => `${c.name}:${c.sameSite}:${c.domain}${c.path}`)
 }
 
 export async function archiveMail(url: string, prefs?: Record<string, any>) {
