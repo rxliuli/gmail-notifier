@@ -248,7 +248,13 @@ export interface ThreadMail {
   extractVersion: number
 }
 
-const DATE_FORMATS = ['MMM D, YYYY h:mm A', 'MMM D, YYYY H:mm', 'D MMM YYYY h:mm A', 'D MMM YYYY H:mm']
+// Strict parsing: MMM is only the short month name, so list full names too.
+const DATE_FORMATS = ['MMM', 'MMMM'].flatMap((m) => [
+  `${m} D, YYYY h:mm A`,
+  `${m} D, YYYY H:mm`,
+  `D ${m} YYYY h:mm A`,
+  `D ${m} YYYY H:mm`,
+])
 
 // Tue, Jun 3, 2025 at 10:12 AM => 2025-06-03T10:12:00.000Z
 // The print view's date text varies (", " or " at " before the time, 12h or
@@ -612,6 +618,19 @@ async function gmailAction({ url, cmd, prefs = {} }: { url: string; cmd: string;
   if (!resp.ok) {
     throw new Error(`gmailAction ${cmd}: ${resp.status}`)
   }
+  // Gmail answers a request it won't honour with 200 and a script that
+  // redirects to its re-auth page.
+  if (text.includes('/spreauth')) {
+    await debugLog('gmailAction: reauth, google.com cookies (name:sameSite:path) ->', await describeCookies())
+    throw new Error(`gmailAction ${cmd}: Gmail asked to re-authenticate`)
+  }
+}
+
+// Names and flags only, never values: enough to see which session cookies
+// the extension's requests can and cannot carry.
+async function describeCookies() {
+  const cookies = await browser.cookies.getAll({ domain: 'google.com' })
+  return cookies.map((c) => `${c.name}:${c.sameSite}:${c.domain}${c.path}`)
 }
 
 export async function archiveMail(url: string, prefs?: Record<string, any>) {

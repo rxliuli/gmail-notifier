@@ -169,6 +169,9 @@ describe('tools', () => {
     'Tue, Jun 3, 2025 at 10:12',
     'Tue, 3 Jun 2025 at 10:12',
     'Tue, 3 Jun 2025, 10:12 AM',
+    // seen live on Firefox (en-GB): full month name
+    '3 June 2025 at 10:12',
+    'June 3, 2025 at 10:12 AM',
   ])('formatDate understands %s', (date) => {
     expect(formatDate(date)).eq(formatDate('Tue, Jun 3, 2025 at 10:12 AM'))
   })
@@ -477,17 +480,18 @@ describe('gmail actions', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
   })
-  function stub(postStatus: number) {
+  function stub(postStatus: number, postBody = '') {
     vi.stubGlobal('browser', {
       storage: { local: { get: vi.fn(async () => ({})) } },
       cookies: {
         get: vi.fn(async () => ({ value: cookie })),
         getAllCookieStores: vi.fn(async () => []),
+        getAll: vi.fn(async () => []),
       },
     })
     const fetchMock = vi.fn(async (_href: string, init?: RequestInit) =>
       init?.method === 'POST'
-        ? new Response('', { status: postStatus })
+        ? new Response(postBody, { status: postStatus })
         : new Response(`<script>ID_KEY = 'ik-1';</script>`),
     )
     vi.stubGlobal('fetch', fetchMock)
@@ -512,5 +516,11 @@ describe('gmail actions', () => {
   it('rejects when Gmail refuses the action instead of pretending it worked', async () => {
     stub(403)
     await expect(markAsRead(THREAD_URL)).rejects.toThrow('403')
+  })
+
+  it('rejects a 200 that is really a redirect to the re-auth page', async () => {
+    // Seen live on Firefox: status 200, nothing applied.
+    stub(200, '<script>top.location="https://mail.google.com/mail/u/1/spreauth"</script>')
+    await expect(markAsRead(THREAD_URL)).rejects.toThrow('re-authenticate')
   })
 })
