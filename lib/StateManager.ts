@@ -28,10 +28,6 @@ export class StateManager {
   accounts: string[] = []
   threads: EmailThread[] = []
   notifiedEmails: Set<string> = new Set()
-  // Mails the user read/archived/deleted from here. notify() rebuilds
-  // notifiedEmails from the current list, so without this a mail that comes
-  // back on the next poll (its Gmail action failed) is notified again.
-  private handledEmails: Set<string> = new Set()
   viewedEmails: Set<string> = new Set()
 
   constructor(private readonly api: GmailApi) {}
@@ -71,15 +67,12 @@ export class StateManager {
         await debugLog('notify: a listener failed ->', err)
       }
     }
-    // Replace, don't accumulate: notifiedEmails is only ever queried against
-    // urls still in `threads` (see getNewThreads), so remembering urls that
-    // dropped out - read, archived, deleted - is dead weight. Left to grow
-    // forever it'd make the storage.local write below an unbounded history
-    // of every email this install has ever seen. Rebuilding it from the
-    // current threads each time keeps it naturally bounded to "currently
-    // relevant" and, as a side effect, lets an email that gets manually
-    // marked unread again in Gmail itself be treated as new again too.
-    this.notifiedEmails = new Set(this.threads.map((it) => it.url))
+    // Accumulate; fetchThreads prunes this to what Gmail still lists unread.
+    // A mail acted on here leaves this.threads at once, but stays notified
+    // until Gmail's feed drops it - so a failed or not-yet-applied action
+    // doesn't re-notify it on the next poll, and a mail marked unread again
+    // in Gmail after it left the feed is new again.
+    this.threads.forEach((it) => this.notifiedEmails.add(it.url))
     // A separate write, after the replace above: this has to reflect *this*
     // batch's notifiedEmails, but the isLoggedIn/accounts/threads write above
     // has to happen before the listeners loop (it pushes a 'refreshPopup'
@@ -105,7 +98,7 @@ export class StateManager {
   }
 
   getNewThreads() {
-    return this.threads.filter((it) => !this.notifiedEmails.has(it.url) && !this.handledEmails.has(it.url))
+    return this.threads.filter((it) => !this.notifiedEmails.has(it.url))
   }
   getUnreadThreads() {
     return this.threads.filter((it) => !this.viewedEmails.has(it.url))
@@ -133,6 +126,9 @@ export class StateManager {
       // list never confuses two accounts' threads. Feed entries are tagged
       // with their account here so the popup can label them.
       const feeds = rssList.flatMap((rss) => rss.feeds.map((it) => ({ ...it, account: rss.email })))
+      // getAllRSS is all-or-nothing, so this is every account's full feed.
+      const feedUrls = new Set(feeds.map((it) => it.url))
+      this.notifiedEmails = new Set([...this.notifiedEmails].filter((url) => feedUrls.has(url)))
       // Assembled in locals and written to this.threads only once complete:
       // the getThreadMail() calls below take hundreds of ms, and any action
       // arriving in that window calls notify(), which persists this.threads
@@ -188,15 +184,17 @@ export class StateManager {
                 feeds.find((it) => it.url === t.url)?.modified === t.modified),
           )
       const newFeeds = feeds.filter((it) => !keptThreads.find((t) => t.url === it.url))
-      const newThreads = await Promise.all(
-        newFeeds.map(async (it) => {
-          const details = await this.api.getThreadMail(it.url)
-          return {
-            ...it,
-            ...details,
-          } satisfies EmailThread
-        }),
-      )
+      // Per thread: one mail that fails to fetch or parse must not hide the
+      // rest. It isn't notified yet, so the next poll retries and notifies it.
+      const details = await Promise.allSettled(newFeeds.map((it) => this.api.getThreadMail(it.url)))
+      const newThreads = newFeeds.flatMap((it, i) => {
+        const result = details[i]!
+        if (result.status === 'rejected') {
+          void debugLog('fetchThreads: thread failed ->', it.url, result.reason)
+          return []
+        }
+        return [{ ...it, ...result.value } satisfies EmailThread]
+      })
       // Actions that landed while the detail fetches were in flight
       // (markAsRead, archive, delete, clearViewed on popup close) filtered
       // this.threads immediately - don't resurrect what they removed, neither
@@ -227,28 +225,21 @@ export class StateManager {
   }
 
   async markAsRead(url: string) {
-    this.handledEmails.add(url)
-    this.threads = this.threads.filter((t) => t.url !== url)
-    this.api.markAsRead(url).catch((err) => {
-      void debugLog('markAsRead: failed ->', err)
-      this.fetchThreads()
-    })
-    await this.notify()
+    await this.removeAll([url], (u) => this.api.markAsRead(u))
   }
   async markAsUnread(url: string) {
     this.viewedEmails.delete(url)
     this.api.markAsUnread(url).catch((err) => {
       void debugLog('markAsUnread: failed ->', err)
-      this.fetchThreads()
+      void this.fetchThreads().catch(() => {})
     })
     await this.notify()
   }
   async viewed(url: string) {
-    this.handledEmails.add(url)
     this.viewedEmails.add(url)
     this.api.markAsRead(url).catch((err) => {
       void debugLog('viewed: failed ->', err)
-      this.fetchThreads()
+      void this.fetchThreads().catch(() => {})
     })
     await this.notify()
   }
@@ -262,14 +253,13 @@ export class StateManager {
     await this.removeAll(urls, (url) => this.api.delete(url))
   }
   private async removeAll(urls: string[], action: (url: string) => Promise<void>) {
-    urls.forEach((url) => this.handledEmails.add(url))
     this.threads = this.threads.filter((t) => !urls.includes(t.url))
     Promise.allSettled(urls.map(action)).then((results) => {
       // Some calls failed: refetch so those threads come back instead of
-      // silently vanishing from the list.
+      // silently vanishing from the list. fetchThreads logs its own failure.
       if (results.some((it) => it.status === 'rejected')) {
-        void debugLog('bulk action: some failed ->', results)
-        this.fetchThreads()
+        void debugLog('action failed ->', results)
+        void this.fetchThreads().catch(() => {})
       }
     })
     await this.notify()
@@ -279,30 +269,12 @@ export class StateManager {
     await this.fetchThreads(true)
   }
   async archive(url: string) {
-    this.handledEmails.add(url)
-    this.threads = this.threads.filter((t) => t.url !== url)
-    this.api.archive(url).catch((err) => {
-      void debugLog('archive: failed ->', err)
-      this.fetchThreads()
-    })
-    await this.notify()
+    await this.removeAll([url], (u) => this.api.archive(u))
   }
   async delete(url: string) {
-    this.handledEmails.add(url)
-    this.threads = this.threads.filter((t) => t.url !== url)
-    this.api.delete(url).catch((err) => {
-      void debugLog('delete: failed ->', err)
-      this.fetchThreads()
-    })
-    await this.notify()
+    await this.removeAll([url], (u) => this.api.delete(u))
   }
   async markAsSpam(url: string) {
-    this.handledEmails.add(url)
-    this.threads = this.threads.filter((t) => t.url !== url)
-    this.api.markAsSpam(url).catch((err) => {
-      void debugLog('markAsSpam: failed ->', err)
-      this.fetchThreads()
-    })
-    await this.notify()
+    await this.removeAll([url], (u) => this.api.markAsSpam(u))
   }
 }

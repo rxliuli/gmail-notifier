@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import { findUnsubscribeLink, hasUnsubscribeLink, planUnsubscribe } from './unsubscribe'
+import { extractRawSource } from './api/gmail'
+
+describe('Show original page', () => {
+  it('finds the one-click headers inside the escaped <pre>', () => {
+    const page = `<!DOCTYPE html><html><body><div>Original Message</div><pre class="raw_message_text" id="raw_message_text">From: News &lt;news@example.com&gt;
+List-Unsubscribe: &lt;https://example.com/u?id=1&amp;t=2&gt;, &lt;mailto:u@example.com&gt;
+List-Unsubscribe-Post: List-Unsubscribe=One-Click
+
+body</pre></body></html>`
+    expect(planUnsubscribe(extractRawSource(page), '')).toEqual({ kind: 'post', url: 'https://example.com/u?id=1&t=2' })
+    // Before: the page itself went to planUnsubscribe, and the header path never matched.
+    expect(planUnsubscribe(page, '')).toBeNull()
+  })
+})
 
 const ONE_CLICK_RAW = [
   'Delivered-To: me@gmail.com',

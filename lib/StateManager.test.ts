@@ -256,7 +256,7 @@ describe('StateManager', () => {
         throw new Error('403')
       })
       // background.ts sends notifications from a listener, i.e. before
-      // notify() rebuilds notifiedEmails - so that is where to look
+      // notify() records the current threads - so that is where to look
       const seenAsNew: string[][] = []
       stateManager.on(async () => {
         seenAsNew.push(stateManager.getNewThreads().map((t) => t.url))
@@ -352,13 +352,44 @@ describe('StateManager', () => {
       await stateManager.fetchThreads()
     }
 
-    it('drops a notifiedEmails entry once its thread is no longer present, instead of accumulating forever', async () => {
+    it('keeps a notifiedEmails entry while Gmail still lists it, and drops it once the feed does', async () => {
       const stateManager = new StateManager(api)
       await seedOneThread(stateManager)
-      expect(stateManager.notifiedEmails.has(feed.url)).toBe(true)
       api.markAsRead.mockImplementation(async () => {})
       await stateManager.markAsRead(feed.url)
+      expect(stateManager.notifiedEmails.has(feed.url)).toBe(true)
+      api.getAllRSS.mockImplementation(async () => [{ email: 'test@test.com', modified: feed.modified, feeds: [] }])
+      await stateManager.fetchThreads()
       expect(stateManager.notifiedEmails.has(feed.url)).toBe(false)
+    })
+
+    it('notifies again for a mail marked unread in Gmail after it left the feed', async () => {
+      const stateManager = new StateManager(api)
+      await seedOneThread(stateManager)
+      api.getAllRSS.mockImplementation(async () => [{ email: 'test@test.com', modified: feed.modified, feeds: [] }])
+      await stateManager.fetchThreads()
+      const seenAsNew: string[] = []
+      stateManager.on(async () => {
+        seenAsNew.push(...stateManager.getNewThreads().map((t) => t.url))
+      })
+      await seedOneThread(stateManager)
+      expect(seenAsNew).toEqual([feed.url])
+    })
+
+    it('one thread failing to fetch does not hide the others', async () => {
+      const stateManager = new StateManager(api)
+      const secondFeed: Feed = { ...feed, url: feed.url.replace('message_id=', 'message_id=2') }
+      api.checkLoginStatus.mockImplementation(async () => true)
+      api.getAllRSS.mockImplementation(async () => [
+        { email: 'test@test.com', modified: feed.modified, feeds: [feed, secondFeed] },
+      ])
+      api.getThreadMail.mockImplementation(async (url: string) => {
+        if (url === secondFeed.url) throw new RangeError('invalid date')
+        return THREAD_DETAILS
+      })
+      await stateManager.fetchThreads()
+      expect(stateManager.threads.map((t) => t.url)).toEqual([feed.url])
+      expect(stateManager.notifiedEmails.has(secondFeed.url)).toBe(false)
     })
 
     it('restore() seeds notifiedEmails from the last notify() call storage write', async () => {

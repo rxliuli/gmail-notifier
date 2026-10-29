@@ -254,6 +254,7 @@ const DATE_FORMATS = ['MMM D, YYYY h:mm A', 'MMM D, YYYY H:mm', 'D MMM YYYY h:mm
 // The print view's date text varies (", " or " at " before the time, 12h or
 // 24h, narrow no-break space before AM/PM, day-first). An unknown format
 // returns '' - a missing time beats dropping every account's mail.
+const loggedDateFormats = new Set<string>()
 export function formatDate(date: string): string {
   const cleaned = date
     .replace(/[\u00a0\u202f]/g, ' ')
@@ -261,7 +262,10 @@ export function formatDate(date: string): string {
     .replace(/(\d{4}),?\s+(?:at\s+)?/, '$1 ')
   const parsed = dayjs(cleaned, DATE_FORMATS, true)
   if (!parsed.isValid()) {
-    void debugLog('formatDate: unknown date format ->', JSON.stringify(date))
+    if (!loggedDateFormats.has(date)) {
+      loggedDateFormats.add(date)
+      void debugLog('formatDate: unknown date format ->', JSON.stringify(date))
+    }
     return ''
   }
   return parsed.toISOString()
@@ -506,8 +510,7 @@ export async function getIk(n: string): Promise<string | null> {
 
 export async function getAt(n: string): Promise<string | null> {
   // Read fresh every time, never cached: Gmail rotates GMAIL_AT, and a stale
-  // one makes every action silently do nothing. (The cache this replaces was
-  // meant to be disabled, but toad-cache's ttl 0 means "never expire".)
+  // one makes every action silently do nothing.
   const at = await getGmailAt(n)
   if (at) {
     return at
@@ -602,9 +605,8 @@ async function gmailAction({ url, cmd, prefs = {} }: { url: string; cmd: string;
     credentials: 'include',
     body,
   })
-  // Checked, not fire-and-forget: a rejected action used to look like a
-  // success, so the mail vanished from the list and came back on the next
-  // poll with no trace of why.
+  // A rejected action must surface, or the mail vanishes from the list and
+  // silently comes back on the next poll.
   const text = await resp.text()
   await debugLog('gmailAction: response ->', { cmd, slot: n, status: resp.status, bodyPreview: text.slice(0, 200) })
   if (!resp.ok) {
@@ -638,10 +640,6 @@ export async function starMail(url: string) {
 
 export async function unstarMail(url: string) {
   return gmailAction({ url, cmd: 'xst' })
-}
-
-export async function markAllAsRead(urls: string[]) {
-  return Promise.all(urls.map((url) => markAsRead(url)))
 }
 
 export function getOpenWebLink(url: string) {
@@ -724,6 +722,7 @@ export async function getRawMessage(url: string): Promise<string> {
   const info = extractGmailInfo(url)
   if (!info) throw Error('no_links')
   const ik = await getIk(info.n)
+  if (!ik) throw Error('getRawMessage: no ik')
   const resp = await fetch(
     `https://mail.google.com/mail/u/${info.n}/?ui=2&ik=${ik}&view=om&th=${info.thread}`,
     { credentials: 'include' },
@@ -731,33 +730,11 @@ export async function getRawMessage(url: string): Promise<string> {
   if (!resp.ok) {
     throw new Error(`getRawMessage: ${resp.status}`)
   }
-  return resp.text()
+  return extractRawSource(await resp.text())
 }
 
-async function getThreadId(messageId: string, ik: string) {
-  // https://mail.google.com/mail/u/0/?ui=2&ik=ff42d05bcd&start=0&num=20&mb=0&rt=c&search=all&q=rfc822msgid:1987838ba0828a8b
-  const params = new URLSearchParams({
-    ui: '2',
-    ik: ik,
-    view: 'tl',
-    start: '0',
-    num: '20',
-    mb: '0',
-    rt: 'c',
-    search: 'all',
-    q: `rfc822msgid:${messageId}`,
-  })
-
-  const response = await fetch(`https://mail.google.com/mail/u/0/?${params}`, {
-    credentials: 'include',
-    headers: {
-      Accept: '*/*',
-      'X-Requested-With': 'XMLHttpRequest',
-    },
-  })
-  if (!response.ok) {
-    throw response
-  }
-  const text = await response.text()
-  throw new Error('not implemented')
+// "Show original" is an HTML page; the source sits HTML-escaped in a <pre>.
+export function extractRawSource(page: string): string {
+  const pre = page.match(/<pre[^>]*id="raw_message_text"[^>]*>([\s\S]*?)<\/pre>/)
+  return pre ? decodeHTML(pre[1]!) : page
 }
