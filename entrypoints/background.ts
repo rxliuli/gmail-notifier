@@ -266,45 +266,30 @@ async function start() {
     }
     return plan.kind
   })
-  bgMessager.onMessage('gmailAction', async (ev) => {
-    const data = ev.data
-    if (data.cmd === 'markAsRead') {
-      await stateManager.markAsRead(data.url)
-      return
+  bgMessager.onMessage('gmailAction', async ({ data }) => {
+    switch (data.cmd) {
+      case 'markAsRead':
+        return stateManager.markAsRead(data.url)
+      case 'markAsUnread':
+        return stateManager.markAsUnread(data.url)
+      case 'viewed':
+        return stateManager.viewed(data.url)
+      case 'archive':
+        return stateManager.archive(data.url)
+      case 'deleteMail':
+        return stateManager.delete(data.url)
+      case 'markAsSpam':
+        return stateManager.markAsSpam(data.url)
+      case 'markAllAsRead':
+        return stateManager.markAllAsRead(data.urls)
+      case 'archiveAll':
+        return stateManager.archiveAll(data.urls)
+      case 'deleteAll':
+        return stateManager.deleteAll(data.urls)
+      default:
+        data satisfies never
+        throw new Error('Unknown command')
     }
-    if (data.cmd === 'viewed') {
-      await stateManager.viewed(data.url)
-      return
-    }
-    if (data.cmd === 'markAllAsRead') {
-      await stateManager.markAllAsRead(data.urls)
-      return
-    }
-    if (data.cmd === 'archiveAll') {
-      await stateManager.archiveAll(data.urls)
-      return
-    }
-    if (data.cmd === 'deleteAll') {
-      await stateManager.deleteAll(data.urls)
-      return
-    }
-    if (data.cmd === 'archive') {
-      await stateManager.archive(data.url)
-      return
-    }
-    if (data.cmd === 'deleteMail') {
-      await stateManager.delete(data.url)
-      return
-    }
-    if (data.cmd === 'markAsSpam') {
-      await stateManager.markAsSpam(data.url)
-      return
-    }
-    if (data.cmd === 'markAsUnread') {
-      await stateManager.markAsUnread(data.url)
-      return
-    }
-    throw new Error('Unknown command')
   })
 
   browser.runtime.onInstalled.addListener(async () => {

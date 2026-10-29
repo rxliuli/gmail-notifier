@@ -12,7 +12,7 @@ export type UnsubscribePlan =
   | { kind: 'mail'; to: string; subject: string }
 
 const UNSUBSCRIBE_TEXT =
-  /unsubscribe|unsub|abmelden|abbestellen|d[ée]sabonner|d[ée]sinscri|darse de baja|cancelar (la )?suscripci[oó]n|uitschrijven|disiscriv|opt[- ]out|退订|取消订阅|配信停止/i
+  /unsub|abmelden|abbestellen|d[ée]sabonner|d[ée]sinscri|darse de baja|cancelar (la )?suscripci[oó]n|uitschrijven|disiscriv|opt[- ]out|退订|取消订阅|配信停止/i
 
 // Cheap enough to run on every popup render; findUnsubscribeLink does the
 // real parse only when the user clicks.

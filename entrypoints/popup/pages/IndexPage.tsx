@@ -36,7 +36,6 @@ function MailItem({
   onClick,
 }: {
   thread: EmailThread
-  // Every listed thread from this thread's sender, this one included.
   senderUrls: string[]
   onClick: () => void
 }) {

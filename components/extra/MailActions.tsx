@@ -24,59 +24,45 @@ export function urlsFromSender(threads: EmailThread[], thread: EmailThread): str
 // The per-mail actions, shared by the list row and the opened mail.
 export function MailActions({ thread, senderUrls }: { thread: EmailThread; senderUrls: string[] }) {
   const queryClient = useQueryClient()
-  async function gmailAction(
-    cmd: Extract<GmailAction, { url: string }>['cmd'],
-    msg: string,
-  ) {
+  async function gmailAction(data: GmailAction) {
+    await bgMessager.sendMessage('gmailAction', data)
+    await queryClient.invalidateQueries({ queryKey: mailQueryKey })
+  }
+  async function run(msg: string, data: GmailAction) {
     try {
-      await bgMessager.sendMessage('gmailAction', {
-        cmd,
-        url: thread.url,
-      })
-      await queryClient.invalidateQueries({ queryKey: mailQueryKey })
+      await gmailAction(data)
       toast.success(msg)
     } catch (err) {
       console.error(err)
       toast.error(msg + ' failed')
     }
   }
-  async function unsubscribe(cleanup: 'archive' | 'deleteMail' | 'archiveAll' | 'deleteAll') {
+  // Removes what the user asked for, whatever kind of unsubscribe it was:
+  // they chose "unsubscribe and remove", and page/mail kinds are a click away.
+  async function unsubscribe(cleanup: GmailAction) {
+    let kind
     try {
-      const kind = await bgMessager.sendMessage('unsubscribe', thread.url)
-      if (kind === null) {
-        toast.error('No unsubscribe option found')
-        return
-      }
-      await removeFromSender(cleanup)
-      toast.success(
-        {
-          post: 'Unsubscribed',
-          open: 'Unsubscribe page opened',
-          mail: 'Unsubscribe mail ready to send',
-        }[kind],
-      )
+      kind = await bgMessager.sendMessage('unsubscribe', thread.url)
     } catch (err) {
       console.error(err)
       toast.error('Unsubscribe failed')
+      return
     }
-  }
-  async function removeFromSender(cmd: 'archive' | 'deleteMail' | 'archiveAll' | 'deleteAll') {
-    await bgMessager.sendMessage(
-      'gmailAction',
-      cmd === 'archive' || cmd === 'deleteMail' ? { cmd, url: thread.url } : { cmd, urls: senderUrls },
+    if (kind === null) {
+      toast.error('No unsubscribe option found')
+      return
+    }
+    await run(
+      {
+        post: 'Unsubscribe request sent',
+        open: 'Unsubscribe page opened',
+        mail: 'Unsubscribe mail ready to send',
+      }[kind],
+      cleanup,
     )
-    await queryClient.invalidateQueries({ queryKey: mailQueryKey })
   }
-  async function senderAction(cmd: 'archiveAll' | 'deleteAll') {
-    const msg = `${cmd === 'archiveAll' ? 'Archive' : 'Delete'} ${senderUrls.length} mails`
-    try {
-      await removeFromSender(cmd)
-      toast.success(msg)
-    } catch (err) {
-      console.error(err)
-      toast.error(msg + ' failed')
-    }
-  }
+  const one = (cmd: 'archive' | 'deleteMail' | 'markAsRead' | 'markAsSpam') => ({ cmd, url: thread.url })
+  const all = (cmd: 'archiveAll' | 'deleteAll') => ({ cmd, urls: senderUrls })
   const othersFromSender = senderUrls.length > 1
   const canUnsubscribe = hasUnsubscribeLink(thread.messages.at(-1)?.contentHtml ?? '')
   return (
@@ -85,7 +71,7 @@ export function MailActions({ thread, senderUrls }: { thread: EmailThread; sende
         size="icon"
         variant="ghost"
         title={'Archive'}
-        onClick={() => gmailAction('archive', 'Archive')}
+        onClick={() => run('Archive', one('archive'))}
       >
         <ArchiveIcon />
       </Button>
@@ -93,7 +79,7 @@ export function MailActions({ thread, senderUrls }: { thread: EmailThread; sende
         size="icon"
         variant="ghost"
         title={'Trash'}
-        onClick={() => gmailAction('deleteMail', 'Delete')}
+        onClick={() => run('Delete', one('deleteMail'))}
       >
         <Trash2Icon />
       </Button>
@@ -101,7 +87,7 @@ export function MailActions({ thread, senderUrls }: { thread: EmailThread; sende
         size="icon"
         variant="ghost"
         title={'Mark as read'}
-        onClick={() => gmailAction('markAsRead', 'Mark as read')}
+        onClick={() => run('Mark as read', one('markAsRead'))}
       >
         <MailOpenIcon />
       </Button>
@@ -115,27 +101,27 @@ export function MailActions({ thread, senderUrls }: { thread: EmailThread; sende
           <DropdownMenuContent align={'end'}>
             {canUnsubscribe && (
               <>
-                <DropdownMenuItem onClick={() => unsubscribe('archive')}>Unsubscribe and archive</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => unsubscribe('deleteMail')}>Unsubscribe and delete</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => unsubscribe(one('archive'))}>Unsubscribe and archive</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => unsubscribe(one('deleteMail'))}>Unsubscribe and delete</DropdownMenuItem>
               </>
             )}
             {canUnsubscribe && othersFromSender && (
               <>
-                <DropdownMenuItem onClick={() => unsubscribe('archiveAll')}>
+                <DropdownMenuItem onClick={() => unsubscribe(all('archiveAll'))}>
                   Unsubscribe and archive all {senderUrls.length} from sender
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => unsubscribe('deleteAll')}>
+                <DropdownMenuItem onClick={() => unsubscribe(all('deleteAll'))}>
                   Unsubscribe and delete all {senderUrls.length} from sender
                 </DropdownMenuItem>
+                <DropdownMenuSeparator />
               </>
             )}
-            {canUnsubscribe && othersFromSender && <DropdownMenuSeparator />}
             {othersFromSender && (
               <>
-                <DropdownMenuItem onClick={() => senderAction('archiveAll')}>
+                <DropdownMenuItem onClick={() => run(`Archive ${senderUrls.length} mails`, all('archiveAll'))}>
                   Archive all {senderUrls.length} from sender
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => senderAction('deleteAll')}>
+                <DropdownMenuItem onClick={() => run(`Delete ${senderUrls.length} mails`, all('deleteAll'))}>
                   Delete all {senderUrls.length} from sender
                 </DropdownMenuItem>
               </>
@@ -147,7 +133,7 @@ export function MailActions({ thread, senderUrls }: { thread: EmailThread; sende
         size="icon"
         variant="ghost"
         title={'Spam'}
-        onClick={() => gmailAction('markAsSpam', 'Mark as spam')}
+        onClick={() => run('Mark as spam', one('markAsSpam'))}
       >
         <BanIcon />
       </Button>
