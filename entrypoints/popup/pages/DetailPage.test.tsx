@@ -10,8 +10,10 @@ import type { EmailThread } from '@/lib/StateManager'
 import { CURRENT_EXTRACT_VERSION, type ThreadMail } from '@/lib/api/gmail'
 
 vi.stubGlobal('browser', fakeBrowser)
+vi.stubGlobal('chrome', fakeBrowser)
 
 const { createAppRouter } = await import('../router')
+const { bgMessager } = await import('@/lib/messager')
 
 function makeThread(messageCount: number, overrides: Partial<EmailThread> = {}): EmailThread {
   const messages: ThreadMail['messages'] = Array.from({ length: messageCount }, (_, i) => ({
@@ -71,6 +73,16 @@ describe('DetailPage', () => {
   beforeEach(() => {
     fakeBrowser.reset()
     queryClient.clear()
+  })
+
+  it('offers the mail actions on the opened mail, without going back to the list', async () => {
+    const send = vi.spyOn(bgMessager, 'sendMessage').mockImplementation(async () => {})
+    const thread = makeThread(1)
+    const screen = await renderDetail(thread)
+    await screen.getByTitle('Archive').click()
+    expect(send).toBeCalledWith('gmailAction', { cmd: 'archive', url: thread.url })
+    await expect.element(screen.getByTitle('Trash')).toBeVisible()
+    await expect.element(screen.getByTitle('Open in Gmail').last()).toBeVisible()
   })
 
   it('hides the collapse-all toggle for a single-message thread', async () => {

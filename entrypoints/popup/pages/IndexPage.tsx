@@ -1,14 +1,11 @@
 import { Button } from '@/components/ui/button'
 import { openMailInWeb, newEmail, getActiveInboxUrl } from '@/lib/api/gmail'
-import { bgMessager, type GmailAction } from '@/lib/messager'
+import { bgMessager } from '@/lib/messager'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { mailQueryKey, useMailQuery } from '@/lib/useMailQuery'
 import dayjs from 'dayjs'
 import {
-  BanIcon,
-  ArchiveIcon,
-  Trash2Icon,
   MailOpenIcon,
   ExternalLinkIcon,
   MoreVerticalIcon,
@@ -16,7 +13,6 @@ import {
   MailPlusIcon,
   BugIcon,
   CopyIcon,
-  MailMinusIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { debugLog } from '@/lib/debugLog'
@@ -32,7 +28,7 @@ import {
 import { FaDiscord, FaGithub } from 'react-icons/fa'
 import type { EmailThread } from '@/lib/StateManager'
 import { getThreadCode } from '@/lib/otp'
-import { hasUnsubscribeLink } from '@/lib/unsubscribe'
+import { MailActions, urlsFromSender } from '@/components/extra/MailActions'
 
 function MailItem({
   thread,
@@ -44,63 +40,7 @@ function MailItem({
   senderUrls: string[]
   onClick: () => void
 }) {
-  const queryClient = useQueryClient()
-  async function gmailAction(
-    cmd: Extract<GmailAction, { url: string }>['cmd'],
-    msg: string,
-  ) {
-    try {
-      await bgMessager.sendMessage('gmailAction', {
-        cmd,
-        url: thread.url,
-      })
-      await queryClient.invalidateQueries({ queryKey: mailQueryKey })
-      toast.success(msg)
-    } catch (err) {
-      console.error(err)
-      toast.error(msg + ' failed')
-    }
-  }
   const code = getThreadCode(thread)
-  const canUnsubscribe = hasUnsubscribeLink(thread.messages.at(-1)?.contentHtml ?? '')
-  async function unsubscribe(cleanup: 'archive' | 'archiveAll' | 'deleteAll') {
-    try {
-      const kind = await bgMessager.sendMessage('unsubscribe', thread.url)
-      if (kind === null) {
-        toast.error('No unsubscribe option found')
-        return
-      }
-      await removeFromSender(cleanup)
-      toast.success(
-        {
-          post: 'Unsubscribed',
-          open: 'Unsubscribe page opened',
-          mail: 'Unsubscribe mail ready to send',
-        }[kind],
-      )
-    } catch (err) {
-      console.error(err)
-      toast.error('Unsubscribe failed')
-    }
-  }
-  async function removeFromSender(cmd: 'archive' | 'archiveAll' | 'deleteAll') {
-    await bgMessager.sendMessage(
-      'gmailAction',
-      cmd === 'archive' ? { cmd, url: thread.url } : { cmd, urls: senderUrls },
-    )
-    await queryClient.invalidateQueries({ queryKey: mailQueryKey })
-  }
-  async function senderAction(cmd: 'archiveAll' | 'deleteAll') {
-    const msg = `${cmd === 'archiveAll' ? 'Archive' : 'Delete'} ${senderUrls.length} mails`
-    try {
-      await removeFromSender(cmd)
-      toast.success(msg)
-    } catch (err) {
-      console.error(err)
-      toast.error(msg + ' failed')
-    }
-  }
-  const othersFromSender = senderUrls.length > 1
   async function copyCode(code: string) {
     try {
       await navigator.clipboard.writeText(code)
@@ -135,81 +75,7 @@ function MailItem({
             className="flex gap-1 group-hover:flex group-has-[[data-state=open]]:flex hidden"
             onClick={(ev) => ev.stopPropagation()}
           >
-            <Button
-              size="icon"
-              variant="ghost"
-              title={'Archive'}
-              onClick={() => gmailAction('archive', 'Archive')}
-            >
-              <ArchiveIcon />
-            </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              title={'Trash'}
-              onClick={() => gmailAction('deleteMail', 'Delete')}
-            >
-              <Trash2Icon />
-            </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              title={'Mark as read'}
-              onClick={() => gmailAction('markAsRead', 'Mark as read')}
-            >
-              <MailOpenIcon />
-            </Button>
-            {(canUnsubscribe || othersFromSender) && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="icon" variant="ghost" title={canUnsubscribe ? 'Unsubscribe' : 'From this sender'}>
-                    <MailMinusIcon />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align={'end'}>
-                  {canUnsubscribe && (
-                    <DropdownMenuItem onClick={() => unsubscribe('archive')}>Unsubscribe and archive</DropdownMenuItem>
-                  )}
-                  {canUnsubscribe && othersFromSender && (
-                    <>
-                      <DropdownMenuItem onClick={() => unsubscribe('archiveAll')}>
-                        Unsubscribe and archive all {senderUrls.length} from sender
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => unsubscribe('deleteAll')}>
-                        Unsubscribe and delete all {senderUrls.length} from sender
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                  {canUnsubscribe && othersFromSender && <DropdownMenuSeparator />}
-                  {othersFromSender && (
-                    <>
-                      <DropdownMenuItem onClick={() => senderAction('archiveAll')}>
-                        Archive all {senderUrls.length} from sender
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => senderAction('deleteAll')}>
-                        Delete all {senderUrls.length} from sender
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-            <Button
-              size="icon"
-              variant="ghost"
-              title={'Spam'}
-              onClick={() => gmailAction('markAsSpam', 'Mark as spam')}
-            >
-              <BanIcon />
-            </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              title={'Open in Gmail'}
-              onClick={() => openMailInWeb(thread.url)}
-            >
-              <ExternalLinkIcon />
-            </Button>
+            <MailActions thread={thread} senderUrls={senderUrls} />
           </div>
         </div>
         {/* Subject */}
@@ -377,17 +243,12 @@ function MailList({
   threads: EmailThread[]
   onSelectFeed: (thread: EmailThread) => void
 }) {
-  const urlsBySender = new Map<string, string[]>()
-  for (const it of threads) {
-    const sender = it.author.email.toLowerCase()
-    urlsBySender.set(sender, [...(urlsBySender.get(sender) ?? []), it.url])
-  }
   const items = (list: EmailThread[]) =>
     list.map((thread) => (
       <MailItem
         key={thread.url}
         thread={thread}
-        senderUrls={urlsBySender.get(thread.author.email.toLowerCase())!}
+        senderUrls={urlsFromSender(threads, thread)}
         onClick={() => onSelectFeed(thread)}
       />
     ))

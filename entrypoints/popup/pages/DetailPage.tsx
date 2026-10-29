@@ -4,12 +4,13 @@ import { useMailQuery } from '@/lib/useMailQuery'
 import type { EmailThread } from '@/lib/StateManager'
 import { getRouteApi, useNavigate } from '@tanstack/react-router'
 import dayjs from 'dayjs'
-import { ArrowLeftIcon, ExternalLinkIcon, PaperclipIcon, ChevronsUpDownIcon, ChevronsDownUpIcon } from 'lucide-react'
+import { ArrowLeftIcon, PaperclipIcon, ChevronsUpDownIcon, ChevronsDownUpIcon } from 'lucide-react'
 import { memo, useEffect, useMemo } from 'react'
 import root from 'react-shadow'
 import { useCollapseState } from '@/lib/useCollapseState'
 import { createStyleSheets } from '@/lib/addStyle'
 import { debugLog } from '@/lib/debugLog'
+import { MailActions, urlsFromSender } from '@/components/extra/MailActions'
 
 // Not importing detailRoute directly from router.tsx: that file imports
 // this one (as the route's component), so a direct import would be
@@ -329,6 +330,7 @@ export function DetailPage() {
     <div className="flex flex-col min-h-screen">
       <DetailToolbar
         thread={thread}
+        senderUrls={urlsFromSender(mailQuery.data!.threads, thread)}
         messageCount={messageCount}
         allCollapsed={collapseStore.hasCollapsed}
         onToggleAll={collapseStore.toggleAll}
@@ -371,6 +373,7 @@ export function DetailPage() {
 
 function DetailToolbar(props: {
   thread: EmailThread
+  senderUrls: string[]
   messageCount: number
   allCollapsed: boolean
   onToggleAll: () => void
@@ -403,9 +406,7 @@ function DetailToolbar(props: {
           {props.allCollapsed ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
         </Button>
       )}
-      <Button size="icon" variant="ghost" title={'Open in Gmail'} onClick={() => openMailInWeb(thread.url)}>
-        <ExternalLinkIcon />
-      </Button>
+      <MailActions thread={thread} senderUrls={props.senderUrls} />
     </div>
   )
 }
