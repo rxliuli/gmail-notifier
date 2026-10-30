@@ -37,6 +37,9 @@ async function sendNotification(stateManager: StateManager, feed: Feed) {
   if (stateManager.notifiedEmails.has(feed.url)) {
     return
   }
+  // Claim it before the first await: a fetch overlapping this one (the popup
+  // opening mid-poll) otherwise saw it as new too and notified it twice.
+  stateManager.notifiedEmails.add(feed.url)
 
   // Safari doesn't support the notifications API (same "unsupported manifest
   // key" warning as idle) - skip instead of throwing.
@@ -66,20 +69,23 @@ async function sendNotification(stateManager: StateManager, feed: Feed) {
   }, 10 * 1000)
 }
 
-export default defineBackground(async () => {
-  await debugLog('background: starting up')
-  try {
-    await start()
-    await debugLog('background: startup complete')
-  } catch (err) {
-    // A throw anywhere in start() aborts every registration after it -
-    // this is the only thing standing between that and total silence (the
-    // idle API being unsupported on Safari did exactly this: everything
-    // after browser.idle.onStateChanged.addListener() - the alarm, the
-    // startup fetch - just never ran, with no error visible anywhere).
-    await debugLog('background: startup failed ->', err)
-  }
+export default defineBackground(() => {
+  // A throw anywhere in start() aborts every registration after it -
+  // this is the only thing standing between that and total silence (the
+  // idle API being unsupported on Safari did exactly this: everything
+  // after browser.idle.onStateChanged.addListener() - the alarm, the
+  // startup fetch - just never ran, with no error visible anywhere).
+  start().then(
+    () => debugLog('background: startup complete'),
+    (err) => debugLog('background: startup failed ->', err),
+  )
 })
+
+// Every listener has to be added before start()'s first await. Firefox's
+// event page and Chrome's service worker only wake for listeners added
+// synchronously at startup; ones added after an await worked until the
+// background was first suspended, then never fired again - no polls, no
+// notifications until the popup was opened.
 
 async function start() {
   const stateManager = new StateManager({
@@ -100,7 +106,7 @@ async function start() {
       await markAsUnread(url)
     },
   })
-  await stateManager.restore()
+  void stateManager.restore()
   // badge listener
   stateManager.on(async () => {
     await updateBadge(stateManager.getUnreadThreads().length)
@@ -167,7 +173,7 @@ async function start() {
       }
     })
   } else {
-    await debugLog(
+    void debugLog(
       'background: browser.idle unsupported, skipping idle-based alarm management',
     )
   }
@@ -305,6 +311,7 @@ async function start() {
   // below. Can't assume it returns a real Promise either - on Safari it
   // returned undefined, and chaining .then() on that threw and took down
   // the rest of startup with it.
+  await debugLog('background: starting up')
   await debugLog('background: creating fetchThreads alarm')
   try {
     const created = browser.alarms.create('fetchThreads', {
