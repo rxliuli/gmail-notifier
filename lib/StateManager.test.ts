@@ -421,6 +421,26 @@ describe('StateManager', () => {
       await seedOneThread(afterRestart)
       expect(seenDuringNotify).toEqual([])
     })
+
+    it('a fetch started before restore() settles still waits for it', async () => {
+      const beforeRestart = new StateManager(api)
+      await seedOneThread(beforeRestart)
+
+      // The event that woke the background (an alarm) runs right after the
+      // listeners are registered, while restore() is still reading storage.
+      const afterRestart = new StateManager(api)
+      const get = fakeBrowser.storage.local.get.bind(fakeBrowser.storage.local)
+      vi.spyOn(fakeBrowser.storage.local, 'get').mockImplementationOnce(
+        (keys) => new Promise((resolve) => setTimeout(() => resolve(get(keys)), 20)),
+      )
+      void afterRestart.restore()
+      const seenDuringNotify: string[] = []
+      afterRestart.on(async () => {
+        seenDuringNotify.push(...afterRestart.getNewThreads().map((it) => it.url))
+      })
+      await seedOneThread(afterRestart)
+      expect(seenDuringNotify).toEqual([])
+    })
   })
 
   describe('multiple accounts', () => {

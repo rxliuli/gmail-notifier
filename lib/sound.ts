@@ -45,9 +45,13 @@ export async function playSound(sound: NotificationSound) {
 export async function playNotificationSound() {
   if (typeof Audio === 'undefined') return
   const sound = await getNotificationSound()
-  if (!sound) return
+  if (!sound) {
+    await debugLog('playNotificationSound: no sound set')
+    return
+  }
   try {
     await playSound(sound)
+    await debugLog('playNotificationSound: played ->', sound.name)
   } catch (err) {
     await debugLog('playNotificationSound: failed ->', String(err))
   }
