@@ -37,6 +37,7 @@ export class StateManager {
   }
 
   private async notify() {
+    await this.restored
     // storage.local, not storage.session: session storage only reached
     // Safari in 16.4 and has been reported flaky there since (Apple dev
     // forum threads on storage.session/storage.local both returning
@@ -89,11 +90,16 @@ export class StateManager {
   // is frequent under MV3) starts with an empty notifiedEmails - the same
   // still-unread thread then looks "new" again on every restart and gets
   // re-notified repeatedly until it's actually read, not just once.
-  async restore() {
-    const { notifiedEmails } = await browser.storage.local.get(['notifiedEmails'])
-    if (Array.isArray(notifiedEmails)) {
-      this.notifiedEmails = new Set(notifiedEmails)
-    }
+  // The background doesn't await this before registering its listeners, so
+  // everything that reads or writes notifiedEmails waits on it instead.
+  private restored: Promise<void> = Promise.resolve()
+  restore() {
+    this.restored = browser.storage.local.get(['notifiedEmails']).then(({ notifiedEmails }) => {
+      if (Array.isArray(notifiedEmails)) {
+        this.notifiedEmails = new Set(notifiedEmails)
+      }
+    })
+    return this.restored
   }
 
   getNewThreads() {
@@ -109,6 +115,7 @@ export class StateManager {
       return
     }
     try {
+      await this.restored
       this.isLoggedIn = await this.api.checkLoginStatus()
       await debugLog('fetchThreads: checkLoginStatus ->', this.isLoggedIn)
       if (!this.isLoggedIn) {
