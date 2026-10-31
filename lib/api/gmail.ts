@@ -249,12 +249,10 @@ export interface ThreadMail {
 }
 
 // Strict parsing: MMM is only the short month name, so list full names too.
-const DATE_FORMATS = ['MMM', 'MMMM'].flatMap((m) => [
-  `${m} D, YYYY h:mm A`,
-  `${m} D, YYYY H:mm`,
-  `D ${m} YYYY h:mm A`,
-  `D ${m} YYYY H:mm`,
-])
+// Strict parsing re-formats and compares, so "08:12" only matches HH, not H.
+const DATE_FORMATS = ['MMM', 'MMMM'].flatMap((m) =>
+  ['h:mm A', 'H:mm', 'HH:mm'].flatMap((time) => [`${m} D, YYYY ${time}`, `D ${m} YYYY ${time}`]),
+)
 
 // Tue, Jun 3, 2025 at 10:12 AM => 2025-06-03T10:12:00.000Z
 // The print view's date text varies (", " or " at " before the time, 12h or

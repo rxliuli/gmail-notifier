@@ -177,6 +177,12 @@ describe('tools', () => {
     expect(formatDate(date)).eq(formatDate('Tue, Jun 3, 2025 at 10:12 AM'))
   })
 
+  it('formatDate understands a leading-zero 24h hour', () => {
+    // seen live: strict parsing rejected "08:12" against H:mm
+    expect(formatDate('3 June 2025 at 08:12')).eq(formatDate('Tue, Jun 3, 2025 at 8:12 AM'))
+    expect(formatDate('3 June 2025 at 08:12')).not.eq('')
+  })
+
   it('formatDate gives up quietly instead of throwing on an unknown format', () => {
     // A throw here used to abort the whole poll, so no account showed any mail.
     expect(formatDate('Di., 3. Juni 2025 um 10:12')).eq('')
