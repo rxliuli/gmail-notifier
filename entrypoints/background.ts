@@ -28,7 +28,10 @@ async function updateBadge(unreadCount: number) {
   }
   await browser.action.setBadgeText({ text: unreadCount.toString() })
   await browser.action.setBadgeBackgroundColor({ color: '#FF0000' })
-  await browser.action.setBadgeTextColor({ color: '#FFFFFF' })
+  // Safari doesn't implement action.setBadgeTextColor (Chrome 110+ and
+  // Firefox 109+ do); calling it there threw on every badge update.
+  // https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/action/setBadgeTextColor#browser_compatibility
+  await browser.action.setBadgeTextColor?.({ color: '#FFFFFF' })
 }
 
 async function sendNotification(stateManager: StateManager, feed: Feed) {
