@@ -585,11 +585,18 @@ async function gmailAction({ url, cmd, prefs = {} }: { url: string; cmd: string;
   )
 
   const href = `https://mail.google.com/mail/u/${n}/s/?v=or&ik=${ik}&at=${at}&subui=chrome&hl=en&ts=` + Date.now()
-  return fetch(href, {
+  const resp = await fetch(href, {
     method: 'POST',
     credentials: 'include',
     body,
   })
+  // When Gmail wants the session re-verified it still answers 200, with a
+  // page that redirects to /spreauth, and the action isn't applied. Throw so
+  // callers re-sync instead of dropping the mail as if it had worked.
+  if (!resp.ok || (await resp.clone().text()).includes('/spreauth')) {
+    throw Error(`gmailAction ${cmd} failed: ${resp.status}${resp.ok ? ' (re-auth redirect)' : ''}`)
+  }
+  return resp
 }
 
 export async function archiveMail(url: string, prefs?: Record<string, any>) {

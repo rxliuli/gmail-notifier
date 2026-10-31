@@ -6,6 +6,7 @@ import {
   getOpenWebLink,
   getGmailAt,
   getRSS,
+  markAsRead,
   detectActiveSlot,
   parseAccountSlot,
   parseAddressField,
@@ -284,6 +285,44 @@ describe('getGmailAt', () => {
     vi.stubGlobal('browser', { cookies: { get, getAllCookieStores } })
 
     expect(await getGmailAt('0')).toBeUndefined()
+  })
+})
+
+describe('gmailAction', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  const mailUrl = 'https://mail.google.com/mail/u/0?account_id=a@b.com&message_id=18f0&view=conv&extsrc=atom'
+
+  function stubAction(actionResponse: Response) {
+    vi.stubGlobal('browser', {
+      cookies: { get: vi.fn().mockResolvedValue({ value: 'at-token' }), getAllCookieStores: vi.fn() },
+      storage: { local: { get: vi.fn(async () => ({})), set: vi.fn() } },
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (href: string, init?: RequestInit) =>
+        init?.method === 'POST' ? actionResponse : new Response(`var GLOBALS; ID_KEY = 'ik-token'`),
+      ),
+    )
+  }
+
+  it('resolves when Gmail applies the action', async () => {
+    stubAction(new Response(')]}\'\n[["a",1]]'))
+    await expect(markAsRead(mailUrl)).resolves.toBeUndefined()
+  })
+
+  it('throws when Gmail answers 200 with a redirect to its re-auth page', async () => {
+    stubAction(
+      new Response('<script>window.location.replace("https://mail.google.com/mail/u/0/spreauth?x=1")</script>'),
+    )
+    await expect(markAsRead(mailUrl)).rejects.toThrow('re-auth redirect')
+  })
+
+  it('throws on a non-ok response', async () => {
+    stubAction(new Response('', { status: 500 }))
+    await expect(markAsRead(mailUrl)).rejects.toThrow('500')
   })
 })
 
