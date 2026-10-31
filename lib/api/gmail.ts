@@ -243,10 +243,30 @@ export interface ThreadMail {
   extractVersion: number
 }
 
+// Strict parsing re-formats and compares, so "08:12" only matches HH, not H.
+const DATE_FORMATS = ['MMM', 'MMMM'].flatMap((m) =>
+  ['h:mm A', 'H:mm', 'HH:mm'].flatMap((time) => [`${m} D, YYYY ${time}`, `D ${m} YYYY ${time}`]),
+)
+
 // Tue, Jun 3, 2025 at 10:12 AM => 2025-06-03T10:12:00.000Z
+// The print view's date text varies (", " or " at " before the time, 12h or
+// 24h, narrow no-break space before AM/PM, day-first). An unknown format
+// returns '' - a missing time beats losing every mail in the poll.
+const loggedDateFormats = new Set<string>()
 export function formatDate(date: string): string {
-  const cleaned = date.replace(/^\w+,\s*/, '')
-  return dayjs(cleaned, 'MMM D, YYYY [at] h:mm A').toISOString()
+  const cleaned = date
+    .replace(/[\u00a0\u202f]/g, ' ')
+    .replace(/^\w+,\s*/, '')
+    .replace(/(\d{4}),?\s+(?:at\s+)?/, '$1 ')
+  const parsed = dayjs(cleaned, DATE_FORMATS, true)
+  if (!parsed.isValid()) {
+    if (!loggedDateFormats.has(date)) {
+      loggedDateFormats.add(date)
+      void debugLog('formatDate: unknown date format ->', JSON.stringify(date))
+    }
+    return ''
+  }
+  return parsed.toISOString()
 }
 
 export function parseAddressField(html: string): string[] {
