@@ -40,12 +40,11 @@ const ShadowDiv = root.div as NonNullable<typeof root.div>
 //
 // The white background belongs here for the same reason, next to that black:
 // both are the baseline a plain browser gives raw HTML, and dark mode is built
-// on exactly that baseline - invert() turns this white into the pure black that
-// brightness() below relies on. Keeping it here, unconditional, means the host
-// only ever restates the browser's own baseline and the dark-mode sheet never
-// has to; that matters because the filter is applied on top of this baseline,
-// not instead of it, and because the popup's own `--background` is white in
-// light mode too - so light mode is unaffected either way.
+// on exactly that baseline. The dark-mode sheet then clears this fill again
+// (see DARK_MODE_RULES): inverted, it would be a pure-black slab inside the
+// grey popup, while a transparent host lets the popup's own --background show
+// through. In light mode the popup's `--background` is white too, so this
+// baseline is invisible there either way.
 const BASE_RESET_STYLE = `
   :host {
     color: #000;
@@ -70,11 +69,10 @@ const BASE_RESET_STYLE = `
 // original color distance, so text that was barely legible on white becomes
 // barely legible on black instead of actually improving.
 //
-// brightness(), not contrast(), fixes that gap: the host background is white
-// (set by BASE_RESET_STYLE, not by these rules - see there for why it lives
-// next to the colour reset rather than in here), so after invert() it's pinned
-// at pure black (0), where brightness's multiply-by-b leaves it unchanged
-// (0 * b = 0) - only the non-zero text lightens. contrast() looks like the
+// brightness(), not contrast(), fixes that gap: a white email background
+// inverts to pure black (0), where brightness's multiply-by-b leaves it
+// unchanged (0 * b = 0), and the host's own fill is transparent in dark mode
+// (see DARK_MODE_RULES) - only the non-zero text lightens. contrast() looks like the
 // obvious tool for "low contrast text" but is wrong here: it pivots around 50%
 // gray, and inverted light-gray text already lands below that pivot (same side
 // as the black background), so contrast pushes it *toward* black too, shrinking
@@ -91,6 +89,12 @@ const DARK_MODE_BRIGHTNESS = 1.5
 export const DARK_MODE_RULES = `
     :host {
       filter: invert(1) hue-rotate(180deg) brightness(${DARK_MODE_BRIGHTNESS});
+      /* The white baseline from BASE_RESET_STYLE would invert to pure black,
+         a black slab inside the grey popup. A filter leaves transparent
+         pixels transparent, so dropping the host's own fill lets the popup's
+         --background show through unchanged, whatever colour it is. Emails
+         that paint their own white background still invert to black. */
+      background: transparent;
     }
     img, video {
       /* Order matters here, and it's the opposite of what's intuitive: the
