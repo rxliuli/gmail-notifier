@@ -440,8 +440,11 @@ async function getCookie(name: string, url: string): Promise<string | undefined>
   return undefined
 }
 
+// Gmail now sets GMAIL_AT with Path=/mail/u/{n}/ (trailing slash). Cookie
+// path-matching means a URL without the slash no longer matches it, while a
+// URL with the slash still matches the older Path=/mail/u/{n} too.
 export async function getGmailAt(n: string) {
-  return getCookie('GMAIL_AT', `https://mail.google.com/mail/u/${n}`)
+  return getCookie('GMAIL_AT', `https://mail.google.com/mail/u/${n}/`)
 }
 
 // "Logged in" means any signed-in account, not specifically slot 0's -
