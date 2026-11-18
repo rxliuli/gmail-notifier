@@ -52,7 +52,9 @@ describe('useMailQuery', () => {
         <Probe />
       </QueryClientProvider>,
     )
-    await expect.element(screen.getByTestId('probe')).toHaveTextContent('null')
+    await expect
+      .element(screen.getByTestId('probe'))
+      .toHaveTextContent(JSON.stringify({ email: null, threads: [] }))
 
     const threads = [{ url: 'https://mail.google.com/1' }] as any
     await fakeBrowser.storage.local.set({ email: 'me@example.com', threads })
