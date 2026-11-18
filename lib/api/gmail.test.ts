@@ -7,6 +7,7 @@ import {
   getGmailAt,
   getRSS,
   markAsRead,
+  parseGmailActionError,
   detectActiveSlot,
   parseAccountSlot,
   parseAddressField,
@@ -348,6 +349,46 @@ describe('gmailAction', () => {
   it('throws on a non-ok response', async () => {
     stubAction(new Response('', { status: 500 }))
     await expect(markAsRead(mailUrl)).rejects.toThrow('500')
+  })
+
+  it('throws when Gmail answers 200 but rejects the action', async () => {
+    stubAction(
+      new Response(
+        ')]}\'\n134&[null,[[null,[null,"Invalid action token",10],null,null,null,null,null,null,null,null,null,null,null,null,null,0,0]],2,0,"ik"]',
+      ),
+    )
+    await expect(markAsRead(mailUrl)).rejects.toThrow('Invalid action token')
+  })
+
+  it('reads the AT cookie fresh for every action, since Gmail rotates it', async () => {
+    const get = vi.fn().mockResolvedValueOnce({ value: 'at-old' }).mockResolvedValueOnce({ value: 'at-new' })
+    vi.stubGlobal('browser', {
+      cookies: { get, getAllCookieStores: vi.fn() },
+      storage: { local: { get: vi.fn(async () => ({})), set: vi.fn() } },
+    })
+    const fetchMock = vi.fn(async (href: string, init?: RequestInit) =>
+      init?.method === 'POST' ? new Response(')]}\'\n[["a",1]]') : new Response(`var GLOBALS; ID_KEY = 'ik-token'`),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    await markAsRead(mailUrl)
+    await markAsRead(mailUrl)
+    const posts = fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST').map(([href]) => href)
+    expect(posts[0]).toContain('at=at-old')
+    expect(posts[1]).toContain('at=at-new')
+  })
+})
+
+describe('parseGmailActionError', () => {
+  it('extracts the error message from a rejected action', () => {
+    expect(
+      parseGmailActionError(')]}\'\n134&[null,[[null,[null,"Invalid action token",10],null,null]],2,0,"ik"]744&[null]'),
+    ).toBe('Invalid action token')
+  })
+
+  it('returns null for a successful action', () => {
+    expect(
+      parseGmailActionError(')]}\'\n104&[null,[[null,null,null,null,[],null,null,null,null,null,null,null,null,null,null,0,0]],2,0,"ik"]'),
+    ).toBeNull()
   })
 })
 

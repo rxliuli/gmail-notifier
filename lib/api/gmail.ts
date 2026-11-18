@@ -1,7 +1,6 @@
 import { last } from 'es-toolkit'
 import dayjs from 'dayjs'
 import customParseFormat from 'dayjs/plugin/customParseFormat'
-import { Lru } from 'toad-cache'
 import { parse } from 'parse5'
 import {
   getAttribute,
@@ -474,9 +473,12 @@ export function extractGmailInfo(url: string) {
   return null
 }
 
-// IK/AT cache
+// IK is stable per account, so it's cached. AT is deliberately NOT cached:
+// Gmail rotates the GMAIL_AT cookie during a session, and a cached copy goes
+// stale while the service worker stays alive - every action then comes back
+// 200 with "Invalid action token" and silently does nothing. Reading the
+// cookie is cheap, so always read it fresh.
 const ikCache = new Map<string, string>()
-const atCache = new Lru<string>(100, 0) // disable at cache
 
 export async function getIk(n: string): Promise<string | null> {
   if (ikCache.has(n)) {
@@ -511,14 +513,8 @@ export async function getIk(n: string): Promise<string | null> {
 }
 
 export async function getAt(n: string): Promise<string | null> {
-  let at = atCache.get(n)
-  // disable at cache for now
+  const at = await getGmailAt(n)
   if (at) {
-    return at
-  }
-  at = await getGmailAt(n)
-  if (at) {
-    atCache.set(n, at)
     return at
   }
 
@@ -536,12 +532,10 @@ export async function getAt(n: string): Promise<string | null> {
   if (e) {
     const args = new URLSearchParams(getAttribute(e, 'href')?.split('?')[1])
     if (args.has('at')) {
-      atCache.set(n, args.get('at')!)
       return args.get('at')
     }
   }
   if (input && getAttribute(input, 'value') && getAttribute(input, 'value') !== 'null') {
-    atCache.set(n, getAttribute(input, 'value')!)
     return getAttribute(input, 'value')!
   }
   throw Error('core.js -> at (h); Try to open Gmail in a browser tab to set the cookie')
@@ -616,10 +610,22 @@ async function gmailAction({ url, cmd, prefs = {} }: { url: string; cmd: string;
   // When Gmail wants the session re-verified it still answers 200, with a
   // page that redirects to /spreauth, and the action isn't applied. Throw so
   // callers re-sync instead of dropping the mail as if it had worked.
-  if (!resp.ok || (await resp.clone().text()).includes('/spreauth')) {
+  const text = await resp.clone().text()
+  if (!resp.ok || text.includes('/spreauth')) {
     throw Error(`gmailAction ${cmd} failed: ${resp.status}${resp.ok ? ' (re-auth redirect)' : ''}`)
   }
+  // Rejected actions also come back 200: the first chunk carries
+  // [null,"<message>",<code>] where a successful one has null, e.g.
+  // )]}'\n134&[null,[[null,[null,"Invalid action token",10],null,...
+  const error = parseGmailActionError(text)
+  if (error) {
+    throw Error(`gmailAction ${cmd} failed: ${error}`)
+  }
   return resp
+}
+
+export function parseGmailActionError(text: string): string | null {
+  return text.match(/^\)\]\}'\s*\d+&\[null,\[\[null,\[null,"([^"]+)",\d+\]/)?.[1] ?? null
 }
 
 export async function archiveMail(url: string, prefs?: Record<string, any>) {

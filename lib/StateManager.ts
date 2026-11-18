@@ -229,7 +229,7 @@ export class StateManager {
   async markAsRead(url: string) {
     this.threads = this.threads.filter((t) => t.url !== url)
     this.api.markAsRead(url).catch((err) => {
-      console.error('markAsRead', err)
+      void debugLog('markAsRead: failed ->', err)
       this.fetchThreads()
     })
     await this.notify()
@@ -237,7 +237,7 @@ export class StateManager {
   async markAsUnread(url: string) {
     this.viewedEmails.delete(url)
     this.api.markAsUnread(url).catch((err) => {
-      console.error('markAsUnread', err)
+      void debugLog('markAsUnread: failed ->', err)
       this.fetchThreads()
     })
     await this.notify()
@@ -245,7 +245,7 @@ export class StateManager {
   async viewed(url: string) {
     this.viewedEmails.add(url)
     this.api.markAsRead(url).catch((err) => {
-      console.error('viewed', err)
+      void debugLog('viewed: failed ->', err)
       this.fetchThreads()
     })
     await this.notify()
@@ -253,7 +253,7 @@ export class StateManager {
   async markAllAsRead(urls: string[]) {
     this.threads = this.threads.filter((t) => !urls.includes(t.url))
     Promise.allSettled(urls.map((url) => this.api.markAsRead(url))).catch((err) => {
-      console.error('markAllAsRead', err)
+      void debugLog('markAllAsRead: failed ->', err)
       this.fetchThreads()
     })
     await this.notify()
@@ -265,7 +265,7 @@ export class StateManager {
   async archive(url: string) {
     this.threads = this.threads.filter((t) => t.url !== url)
     this.api.archive(url).catch((err) => {
-      console.error('archive', err)
+      void debugLog('archive: failed ->', err)
       this.fetchThreads()
     })
     await this.notify()
@@ -273,7 +273,7 @@ export class StateManager {
   async delete(url: string) {
     this.threads = this.threads.filter((t) => t.url !== url)
     this.api.delete(url).catch((err) => {
-      console.error('delete', err)
+      void debugLog('delete: failed ->', err)
       this.fetchThreads()
     })
     await this.notify()
@@ -281,7 +281,7 @@ export class StateManager {
   async markAsSpam(url: string) {
     this.threads = this.threads.filter((t) => t.url !== url)
     this.api.markAsSpam(url).catch((err) => {
-      console.error('markAsSpam', err)
+      void debugLog('markAsSpam: failed ->', err)
       this.fetchThreads()
     })
     await this.notify()
